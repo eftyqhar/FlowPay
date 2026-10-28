@@ -1,13 +1,16 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { Employee } from '@/lib/types';
-import { generateEmployeeId } from '@/lib/utils';
+import { Employee, EmployeeDocument } from '@/lib/types';
+import { generateEmployeeId, generateId } from '@/lib/utils';
 
 interface EmployeeState {
   employees: Employee[];
-  addEmployee: (employee: Omit<Employee, 'id' | 'createdAt' | 'updatedAt' | 'employeeId'>) => void;
+  addEmployee: (employee: Omit<Employee, 'id' | 'createdAt' | 'updatedAt' | 'employeeId'>) => Employee;
   updateEmployee: (id: string, updates: Partial<Employee>) => void;
+  deleteEmployee: (id: string) => void;
   toggleEmployeeStatus: (id: string) => void;
+  addDocument: (employeeId: string, document: Omit<EmployeeDocument, 'id' | 'uploadDate'>) => void;
+  deleteDocument: (employeeId: string, documentId: string) => void;
   getEmployeeById: (id: string) => Employee | undefined;
   getEmployeesByDepartment: (dept: string) => Employee[];
   getActiveEmployees: () => Employee[];
@@ -19,26 +22,35 @@ export const useEmployeeStore = create<EmployeeState>()(
   persist(
     (set, get) => ({
       employees: [],
-      addEmployee: (employeeData) =>
-        set((state) => {
-          const newId = generateEmployeeId(state.employees.length);
-          const now = new Date().toISOString();
-          const newEmployee: Employee = {
-            ...employeeData,
-            id: crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15),
-            employeeId: newId,
-            createdAt: now,
-            updatedAt: now,
-          };
-          return {
-            employees: [...state.employees, newEmployee],
-          };
-        }),
+      addEmployee: (employeeData) => {
+        const stateEmployees = get().employees;
+        const newId = generateEmployeeId(stateEmployees.length);
+        const now = new Date().toISOString();
+        const newEmployee: Employee = {
+          ...employeeData,
+          id: generateId(),
+          employeeId: newId,
+          leaveBalance: employeeData.leaveBalance || { casual: 10, sick: 14, annual: 15 },
+          documents: employeeData.documents || [],
+          createdAt: now,
+          updatedAt: now,
+        };
+
+        set((state) => ({
+          employees: [...state.employees, newEmployee],
+        }));
+
+        return newEmployee;
+      },
       updateEmployee: (id, updates) =>
         set((state) => ({
           employees: state.employees.map((emp) =>
             emp.id === id ? { ...emp, ...updates, updatedAt: new Date().toISOString() } : emp
           ),
+        })),
+      deleteEmployee: (id) =>
+        set((state) => ({
+          employees: state.employees.filter((emp) => emp.id !== id),
         })),
       toggleEmployeeStatus: (id) =>
         set((state) => ({
@@ -52,8 +64,35 @@ export const useEmployeeStore = create<EmployeeState>()(
               : emp
           ),
         })),
+      addDocument: (employeeId, documentData) =>
+        set((state) => ({
+          employees: state.employees.map((emp) => {
+            if (emp.id !== employeeId) return emp;
+            const newDoc: EmployeeDocument = {
+              ...documentData,
+              id: generateId(),
+              uploadDate: new Date().toISOString(),
+            };
+            return {
+              ...emp,
+              documents: [...(emp.documents || []), newDoc],
+              updatedAt: new Date().toISOString(),
+            };
+          }),
+        })),
+      deleteDocument: (employeeId, documentId) =>
+        set((state) => ({
+          employees: state.employees.map((emp) => {
+            if (emp.id !== employeeId) return emp;
+            return {
+              ...emp,
+              documents: (emp.documents || []).filter((d) => d.id !== documentId),
+              updatedAt: new Date().toISOString(),
+            };
+          }),
+        })),
       getEmployeeById: (id) => {
-        return get().employees.find((emp) => emp.id === id);
+        return get().employees.find((emp) => emp.id === id || emp.employeeId === id);
       },
       getEmployeesByDepartment: (dept) => {
         return get().employees.filter((emp) => emp.department === dept);
@@ -76,7 +115,7 @@ export const useEmployeeStore = create<EmployeeState>()(
       },
     }),
     {
-      name: 'payscale-employees',
+      name: 'flowpay-employees',
     }
   )
 );

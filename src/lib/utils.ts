@@ -17,11 +17,21 @@ export function generateEmployeeId(index: number): string {
 
 export function formatDate(date: string): string {
   if (!date) return '';
-  return format(new Date(date), 'MMM dd, yyyy');
+  try {
+    return format(new Date(date), 'MMM dd, yyyy');
+  } catch {
+    return date;
+  }
 }
 
-export function formatCurrency(amount: number, symbol: string = '৳'): string {
-  return `${symbol}${amount.toLocaleString('en-IN', {
+export function roundCurrency(amount: number): number {
+  if (isNaN(amount) || !isFinite(amount)) return 0;
+  return Math.round((amount + Number.EPSILON) * 100) / 100;
+}
+
+export function formatCurrency(amount: number = 0, symbol: string = '৳'): string {
+  const safeAmount = isNaN(amount) ? 0 : amount;
+  return `${symbol}${safeAmount.toLocaleString('en-IN', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;

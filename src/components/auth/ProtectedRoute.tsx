@@ -1,3 +1,4 @@
+import React from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -5,11 +6,12 @@ import { UserRole } from '@/lib/types';
 import { ShieldAlert } from 'lucide-react';
 
 interface ProtectedRouteProps {
+  children?: React.ReactNode;
   requiredPermissions?: string[];
   allowedRoles?: (UserRole | string)[];
 }
 
-export function ProtectedRoute({ requiredPermissions, allowedRoles }: ProtectedRouteProps) {
+export function ProtectedRoute({ children, requiredPermissions, allowedRoles }: ProtectedRouteProps) {
   const { currentUser: user, isAuthenticated } = useAuthStore();
   const location = useLocation();
   const { hasPermission } = usePermissions();
@@ -46,5 +48,5 @@ export function ProtectedRoute({ requiredPermissions, allowedRoles }: ProtectedR
     );
   }
 
-  return <Outlet />;
+  return children ? <>{children}</> : <Outlet />;
 }

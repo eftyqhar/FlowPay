@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useEmployeeStore } from '@/stores/employeeStore';
 import { useDepartmentStore } from '@/stores/departmentStore';
+import { useAuthStore } from '@/stores/authStore';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { DataTable } from '@/components/shared/DataTable';
 import { StatusBadge } from '@/components/shared/StatusBadge';
@@ -21,6 +22,10 @@ export default function AllEmployeesPage() {
   const navigate = useNavigate();
   const { employees, updateEmployee } = useEmployeeStore();
   const { departments } = useDepartmentStore();
+  const { currentUser } = useAuthStore();
+
+  const userRole = (currentUser?.role || '').toLowerCase();
+  const canManageEmployees = ['owner', 'admin', 'hr'].includes(userRole);
   
   const [searchTerm, setSearchTerm] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState<string>('all');
@@ -36,6 +41,7 @@ export default function AllEmployeesPage() {
     const matchesSearch = 
       emp.fullName.toLowerCase().includes(searchTerm.toLowerCase()) || 
       emp.employeeId.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      emp.email.toLowerCase() === searchTerm.toLowerCase() ||
       emp.email.toLowerCase().includes(searchTerm.toLowerCase());
     
     const matchesDept = departmentFilter === 'all' || emp.department === departmentFilter;
@@ -104,16 +110,20 @@ export default function AllEmployeesPage() {
               <DropdownMenuItem onClick={() => navigate(`/employees/${emp.id}`)}>
                 <Eye className="mr-2 h-4 w-4" /> View Profile
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => navigate(`/employees/edit/${emp.id}`)}>
-                <Edit className="mr-2 h-4 w-4" /> Edit Details
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleToggleStatus(emp.id, emp.status)}>
-                {emp.status === 'active' ? (
-                  <><UserX className="mr-2 h-4 w-4" /> Deactivate</>
-                ) : (
-                  <><UserCheck className="mr-2 h-4 w-4" /> Activate</>
-                )}
-              </DropdownMenuItem>
+              {canManageEmployees && (
+                <>
+                  <DropdownMenuItem onClick={() => navigate(`/employees/edit/${emp.id}`)}>
+                    <Edit className="mr-2 h-4 w-4" /> Edit Details
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleToggleStatus(emp.id, emp.status)}>
+                    {emp.status === 'active' ? (
+                      <><UserX className="mr-2 h-4 w-4" /> Deactivate</>
+                    ) : (
+                      <><UserCheck className="mr-2 h-4 w-4" /> Activate</>
+                    )}
+                  </DropdownMenuItem>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -127,9 +137,11 @@ export default function AllEmployeesPage() {
         title="Employees" 
         description="Manage your company's employee directory and details."
       >
-        <Button onClick={() => navigate('/employees/add')} className="bg-indigo-600 hover:bg-indigo-700">
-          <Plus className="mr-2 h-4 w-4" /> Add Employee
-        </Button>
+        {canManageEmployees && (
+          <Button onClick={() => navigate('/employees/add')} className="bg-indigo-600 hover:bg-indigo-700">
+            <Plus className="mr-2 h-4 w-4" /> Add Employee
+          </Button>
+        )}
       </PageHeader>
 
       <div className="flex flex-col sm:flex-row gap-4 mb-6">

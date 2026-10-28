@@ -13,8 +13,15 @@ import DashboardPage from '@/pages/dashboard/DashboardPage';
 // Employees
 import AllEmployeesPage from '@/pages/employees/AllEmployeesPage';
 import AddEmployeePage from '@/pages/employees/AddEmployeePage';
+import EditEmployeePage from '@/pages/employees/EditEmployeePage';
 import EmployeeProfilePage from '@/pages/employees/EmployeeProfilePage';
 import DepartmentsPage from '@/pages/employees/DepartmentsPage';
+
+// Attendance & Leaves
+import AttendancePage from '@/pages/attendance/AttendancePage';
+
+// Loans & Advances
+import LoansPage from '@/pages/loans/LoansPage';
 
 // Payroll
 import CurrentPayrollPage from '@/pages/payroll/CurrentPayrollPage';
@@ -31,10 +38,14 @@ import DepartmentReportPage from '@/pages/reports/DepartmentReportPage';
 import PaymentReportPage from '@/pages/reports/PaymentReportPage';
 import YearlySummaryPage from '@/pages/reports/YearlySummaryPage';
 
-// Settings
+// Settings & System
 import CompanySettingsPage from '@/pages/settings/CompanySettingsPage';
 import UsersRolesPage from '@/pages/settings/UsersRolesPage';
 import SalarySettingsPage from '@/pages/settings/SalarySettingsPage';
+import AuditLogsPage from '@/pages/settings/AuditLogsPage';
+
+// User Profile
+import ProfilePage from '@/pages/profile/ProfilePage';
 
 export function App() {
   useEffect(() => {
@@ -51,19 +62,79 @@ export function App() {
           <Route element={<MainLayout />}>
             <Route index element={<DashboardPage />} />
 
+            {/* Profile */}
+            <Route path="profile" element={<ProfilePage />} />
+
+            {/* Attendance & Leaves */}
+            <Route path="attendance" element={<AttendancePage />} />
+
+            {/* Loans & Advances */}
+            <Route path="loans" element={<LoansPage />} />
+
             {/* Employee Management */}
             <Route path="employees">
-              <Route index element={<AllEmployeesPage />} />
-              <Route path="add" element={<AddEmployeePage />} />
+              <Route
+                index
+                element={
+                  <ProtectedRoute allowedRoles={['owner', 'admin', 'hr', 'accountant']}>
+                    <AllEmployeesPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="add"
+                element={
+                  <ProtectedRoute allowedRoles={['owner', 'admin', 'hr']}>
+                    <AddEmployeePage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="edit/:id"
+                element={
+                  <ProtectedRoute allowedRoles={['owner', 'admin', 'hr']}>
+                    <EditEmployeePage />
+                  </ProtectedRoute>
+                }
+              />
               <Route path=":id" element={<EmployeeProfilePage />} />
             </Route>
-            <Route path="departments" element={<DepartmentsPage />} />
+
+            <Route
+              path="departments"
+              element={
+                <ProtectedRoute allowedRoles={['owner', 'admin', 'hr']}>
+                  <DepartmentsPage />
+                </ProtectedRoute>
+              }
+            />
 
             {/* Payroll Management */}
             <Route path="payroll">
-              <Route index element={<CurrentPayrollPage />} />
-              <Route path="generate" element={<GeneratePayrollPage />} />
-              <Route path="history" element={<PayrollHistoryPage />} />
+              <Route
+                index
+                element={
+                  <ProtectedRoute allowedRoles={['owner', 'admin', 'accountant']}>
+                    <CurrentPayrollPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="generate"
+                element={
+                  <ProtectedRoute allowedRoles={['owner', 'admin', 'accountant']}>
+                    <GeneratePayrollPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="history"
+                element={
+                  <ProtectedRoute allowedRoles={['owner', 'admin', 'accountant']}>
+                    <PayrollHistoryPage />
+                  </ProtectedRoute>
+                }
+              />
               <Route path=":id" element={<PayrollDetailPage />} />
             </Route>
 
@@ -71,17 +142,74 @@ export function App() {
 
             {/* Analytics & Reports */}
             <Route path="reports">
-              <Route path="salary" element={<SalaryReportPage />} />
-              <Route path="department" element={<DepartmentReportPage />} />
-              <Route path="payment" element={<PaymentReportPage />} />
-              <Route path="yearly" element={<YearlySummaryPage />} />
+              <Route
+                path="salary"
+                element={
+                  <ProtectedRoute allowedRoles={['owner', 'admin', 'accountant']}>
+                    <SalaryReportPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="department"
+                element={
+                  <ProtectedRoute allowedRoles={['owner', 'admin', 'accountant', 'hr']}>
+                    <DepartmentReportPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="payment"
+                element={
+                  <ProtectedRoute allowedRoles={['owner', 'admin', 'accountant']}>
+                    <PaymentReportPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="yearly"
+                element={
+                  <ProtectedRoute allowedRoles={['owner', 'admin', 'accountant']}>
+                    <YearlySummaryPage />
+                  </ProtectedRoute>
+                }
+              />
             </Route>
 
             {/* System Settings */}
             <Route path="settings">
-              <Route path="company" element={<CompanySettingsPage />} />
-              <Route path="users" element={<UsersRolesPage />} />
-              <Route path="salary" element={<SalarySettingsPage />} />
+              <Route
+                path="company"
+                element={
+                  <ProtectedRoute allowedRoles={['owner', 'admin']}>
+                    <CompanySettingsPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="users"
+                element={
+                  <ProtectedRoute allowedRoles={['owner', 'admin']}>
+                    <UsersRolesPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="salary"
+                element={
+                  <ProtectedRoute allowedRoles={['owner', 'admin', 'accountant']}>
+                    <SalarySettingsPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="audit-logs"
+                element={
+                  <ProtectedRoute allowedRoles={['owner', 'admin', 'accountant']}>
+                    <AuditLogsPage />
+                  </ProtectedRoute>
+                }
+              />
             </Route>
 
             {/* Fallback route */}

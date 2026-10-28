@@ -23,7 +23,16 @@ export const useSettingsStore = create<SettingsState>()(
         })),
     }),
     {
-      name: 'payscale-settings',
+      name: 'flowpay-settings',
+      merge: (persistedState: any, currentState: SettingsState) => {
+        return {
+          ...currentState,
+          settings: {
+            ...DEFAULT_COMPANY_SETTINGS,
+            ...(persistedState?.settings || {}),
+          },
+        };
+      },
     }
   )
 );
