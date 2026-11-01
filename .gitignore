@@ -29,3 +29,7 @@ dist-ssr
 !.env.example
 
 *.tsbuildinfo
+
+# PDF documents (generated locally)
+*.pdf
+
