@@ -8,7 +8,13 @@ interface LoanState {
   applyLoan: (loanData: Omit<LoanRecord, 'id' | 'appliedAt' | 'remainingBalance' | 'status' | 'repayments'>) => LoanRecord;
   approveLoan: (id: string, approvedBy: string) => void;
   rejectLoan: (id: string) => void;
-  recordInstallmentDeduction: (employeeId: string, month: number, year: number, payrollRecordId: string) => number;
+  recordInstallmentDeduction: (
+    employeeId: string,
+    month: number,
+    year: number,
+    payrollRecordId: string,
+    customAmount?: number
+  ) => number;
   settleEarly: (id: string) => void;
   getActiveLoan: (employeeId: string) => LoanRecord | undefined;
   getLoansByEmployee: (employeeId: string) => LoanRecord[];
@@ -53,7 +59,7 @@ export const useLoanStore = create<LoanState>()(
           ),
         }));
       },
-      recordInstallmentDeduction: (employeeId, month, year, payrollRecordId) => {
+      recordInstallmentDeduction: (employeeId, month, year, payrollRecordId, customAmount) => {
         const activeLoan = get().getActiveLoan(employeeId);
         if (!activeLoan) return 0;
 
@@ -63,7 +69,12 @@ export const useLoanStore = create<LoanState>()(
         );
         if (alreadyDeducted) return 0;
 
-        const deductionAmount = Math.min(activeLoan.monthlyInstallment, activeLoan.remainingBalance);
+        const scheduledAmount =
+          customAmount !== undefined && customAmount > 0
+            ? customAmount
+            : activeLoan.monthlyInstallment;
+
+        const deductionAmount = Math.min(scheduledAmount, activeLoan.remainingBalance);
         const newBalance = Math.max(0, activeLoan.remainingBalance - deductionAmount);
         const isCompleted = newBalance <= 0;
 

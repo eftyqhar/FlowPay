@@ -42,7 +42,7 @@ export const useAuditStore = create<AuditState>()(
               timestamp: new Date().toISOString(),
             },
             ...state.logs,
-          ],
+          ].slice(0, 500),
         })),
       clearLogs: () => set({ logs: [] }),
       getLogsByModule: (module) => get().logs.filter((l) => l.module === module),

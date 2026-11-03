@@ -44,6 +44,10 @@ export default function DepartmentsPage() {
     }
 
     if (isEdit) {
+      const currentDept = departments.find((d) => d.id === currentId);
+      if (currentDept && currentDept.name !== formData.name) {
+        useEmployeeStore.getState().updateDepartmentName(currentDept.name, formData.name);
+      }
       updateDepartment(currentId, formData);
       toast.success('Department updated successfully');
     } else {

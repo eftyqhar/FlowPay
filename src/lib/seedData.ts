@@ -3,6 +3,7 @@ import { usePayrollStore } from '@/stores/payrollStore';
 import { useAttendanceStore } from '@/stores/attendanceStore';
 import { useLoanStore } from '@/stores/loanStore';
 import { Employee, AttendanceStatus } from '@/lib/types';
+import { getLocalDateString } from './utils';
 
 export const initializeSeedData = () => {
   const { employees, addEmployee } = useEmployeeStore.getState();
@@ -468,7 +469,7 @@ export const initializeSeedData = () => {
   }
 
   // Seed daily attendance for today
-  const today = new Date().toISOString().split('T')[0];
+  const today = getLocalDateString();
   const statuses: AttendanceStatus[] = ['present', 'present', 'present', 'late', 'present'];
 
   stateEmployees.forEach((emp, i) => {

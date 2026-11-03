@@ -48,7 +48,7 @@ import { useEmployeeStore } from '@/stores/employeeStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useAuditStore } from '@/stores/auditStore';
 import { ATTENDANCE_STATUSES, LEAVE_STATUSES } from '@/lib/constants';
-import { formatDate } from '@/lib/utils';
+import { formatDate, getLocalDateString } from '@/lib/utils';
 import { AttendanceStatus, LeaveType } from '@/lib/types';
 import { toast } from 'sonner';
 
@@ -80,7 +80,7 @@ export default function AttendancePage() {
     );
   }, [employees, currentUser]);
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = getLocalDateString();
   const [selectedDate, setSelectedDate] = useState(today);
 
   // Today's record for currently logged-in user
@@ -99,6 +99,11 @@ export default function AttendancePage() {
   const [endDate, setEndDate] = useState(today);
   const [daysCount, setDaysCount] = useState(1);
   const [reason, setReason] = useState('');
+
+  // Leave Rejection Modal
+  const [rejectModalOpen, setRejectModalOpen] = useState(false);
+  const [rejectingLeaveReq, setRejectingLeaveReq] = useState<any>(null);
+  const [rejectionReasonInput, setRejectionReasonInput] = useState('');
 
   // Attendance Correction Modal
   const [correctModalOpen, setCorrectModalOpen] = useState(false);
@@ -228,18 +233,27 @@ export default function AttendancePage() {
   };
 
   const handleRejectLeave = (req: any) => {
-    const rejectionReason = window.prompt('Enter reason for leave rejection:');
-    if (rejectionReason === null) return;
+    setRejectingLeaveReq(req);
+    setRejectionReasonInput('Operational workload constraints');
+    setRejectModalOpen(true);
+  };
 
-    rejectLeave(req.id, rejectionReason || 'Operational workload constraints', currentUser?.name || 'HR Manager');
+  const handleConfirmRejectLeave = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!rejectingLeaveReq) return;
+
+    const reason = rejectionReasonInput.trim() || 'Operational workload constraints';
+    rejectLeave(rejectingLeaveReq.id, reason, currentUser?.name || 'HR Manager');
     addLog({
       userId: currentUser?.id || 'USR-004',
       userName: currentUser?.name || 'HR Manager',
       action: 'Reject Leave Request',
       module: 'Attendance',
-      details: `Rejected leave for ${req.employeeName}. Reason: ${rejectionReason}`,
+      details: `Rejected leave for ${rejectingLeaveReq.employeeName}. Reason: ${reason}`,
     });
-    toast.info(`Leave request rejected for ${req.employeeName}`);
+    toast.info(`Leave request rejected for ${rejectingLeaveReq.employeeName}`);
+    setRejectModalOpen(false);
+    setRejectingLeaveReq(null);
   };
 
   const visibleLeaves = isEmployee && myEmployee
@@ -713,6 +727,41 @@ export default function AttendancePage() {
                 </Button>
                 <Button type="submit" className="bg-indigo-600 hover:bg-indigo-700">
                   Save & Log Correction
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Leave Rejection Dialog */}
+      <Dialog open={rejectModalOpen} onOpenChange={setRejectModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reject Leave Application</DialogTitle>
+          </DialogHeader>
+          {rejectingLeaveReq && (
+            <form onSubmit={handleConfirmRejectLeave} className="space-y-4 pt-2">
+              <p className="text-xs text-slate-500">
+                You are rejecting the <strong>{rejectingLeaveReq.leaveType}</strong> leave request for{' '}
+                <strong>{rejectingLeaveReq.employeeName}</strong> ({rejectingLeaveReq.daysCount} days).
+              </p>
+              <div className="space-y-2">
+                <Label htmlFor="rejectionReason">Reason for Rejection *</Label>
+                <Input
+                  id="rejectionReason"
+                  value={rejectionReasonInput}
+                  onChange={(e) => setRejectionReasonInput(e.target.value)}
+                  placeholder="e.g. Critical project milestone / operational coverage"
+                  required
+                />
+              </div>
+              <DialogFooter className="pt-2">
+                <Button type="button" variant="outline" onClick={() => setRejectModalOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" variant="destructive">
+                  Confirm Rejection
                 </Button>
               </DialogFooter>
             </form>

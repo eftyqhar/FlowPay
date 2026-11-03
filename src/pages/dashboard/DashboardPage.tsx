@@ -47,7 +47,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts';
-import { formatCurrency, getMonthName, formatDate } from '@/lib/utils';
+import { formatCurrency, getMonthName, formatDate, getLocalDateString } from '@/lib/utils';
 import { Separator } from '@/components/ui/separator';
 
 export default function DashboardPage() {
@@ -93,7 +93,7 @@ export default function DashboardPage() {
   );
 
   // Today attendance metrics
-  const today = new Date().toISOString().split('T')[0];
+  const today = getLocalDateString();
   const todayRecords = attendanceRecords.filter((r) => r.date === today);
   const presentCount = todayRecords.filter((r) => r.status === 'present').length;
   const lateCount = todayRecords.filter((r) => r.status === 'late').length;

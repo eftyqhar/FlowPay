@@ -43,7 +43,24 @@ export const useDepartmentStore = create<DepartmentState>()(
       },
     }),
     {
-      name: 'payscale-departments',
+      name: 'flowpay-departments',
+      merge: (persistedState: any, currentState: DepartmentState) => {
+        let state = persistedState;
+        if (!state && typeof window !== 'undefined') {
+          const old = localStorage.getItem('payscale-departments');
+          if (old) {
+            try {
+              state = JSON.parse(old)?.state;
+            } catch {
+              // Ignore
+            }
+          }
+        }
+        return {
+          ...currentState,
+          ...(state || {}),
+        };
+      },
     }
   )
 );

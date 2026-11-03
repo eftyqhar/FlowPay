@@ -10,6 +10,7 @@ import {
 } from '@/lib/salary';
 import { generateId } from '@/lib/utils';
 import { useSettingsStore } from './settingsStore';
+import { useLoanStore } from './loanStore';
 
 export interface SalaryTrend {
   month: string;
@@ -67,7 +68,14 @@ export const usePayrollStore = create<PayrollState>()(
         const now = new Date().toISOString();
         const settings = useSettingsStore.getState().settings;
 
-        const records: PayrollRecord[] = employees.map((emp) => {
+        // Prevent generating duplicate drafts for employees who already have an approved or paid record for this month/year
+        const existingRecordsForMonth = get().payrollRecords.filter(
+          (r) => r.month === month && r.year === year && (r.status === 'approved' || r.status === 'paid')
+        );
+        const finalizedEmployeeIds = new Set(existingRecordsForMonth.map((r) => r.employeeId));
+        const eligibleEmployees = employees.filter((e) => !finalizedEmployeeIds.has(e.id));
+
+        const records: PayrollRecord[] = eligibleEmployees.map((emp) => {
           const absentDays = emp.absentDays !== undefined ? emp.absentDays : (emp.unpaidLeaveDays || 0);
           const calc = calculateFullSalary(
             {
@@ -156,6 +164,23 @@ export const usePayrollStore = create<PayrollState>()(
         const now = new Date().toISOString();
         const txRef =
           transactionRef || `TXN-${Date.now().toString(36).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+        // Automatically record installment deductions in useLoanStore for approved records transitioning to paid
+        const approvedRecords = get().payrollRecords.filter(
+          (record) => ids.includes(record.id) && record.status === 'approved'
+        );
+
+        approvedRecords.forEach((record) => {
+          if (record.loanDeduction && record.loanDeduction > 0) {
+            useLoanStore.getState().recordInstallmentDeduction(
+              record.employeeId,
+              record.month,
+              record.year,
+              record.id,
+              record.loanDeduction
+            );
+          }
+        });
 
         set((state) => ({
           payrollRecords: state.payrollRecords.map((record) =>

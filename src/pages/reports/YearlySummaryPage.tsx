@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { Download } from 'lucide-react';
+import { Download, Wallet, Users, TrendingUp, BarChart3 } from 'lucide-react';
 import { usePayrollStore } from '@/stores/payrollStore';
 import { formatCurrency, getMonthName } from '@/lib/utils';
 import { DataTable } from '@/components/shared/DataTable';
@@ -14,6 +14,12 @@ import { exportToExcel } from '@/lib/export';
 export default function YearlySummaryPage() {
   const { payrollRecords: payrolls } = usePayrollStore();
   const [year, setYear] = useState<string>(new Date().getFullYear().toString());
+
+  const uniqueYears = useMemo(() => {
+    const set = new Set(payrolls.map((p) => p.year));
+    set.add(new Date().getFullYear());
+    return Array.from(set).sort((a, b) => b - a);
+  }, [payrolls]);
 
   const yearData = useMemo(() => {
     return payrolls.filter(p => p.year.toString() === year);
@@ -89,9 +95,9 @@ export default function YearlySummaryPage() {
         <PageHeader title="Yearly Summary" description={`Payroll summary for ${year}`} />
         <div className="flex gap-4">
           <Select value={year} onValueChange={setYear}>
-            <SelectTrigger className="w-[120px]"><SelectValue placeholder="Year" /></SelectTrigger>
+            <SelectTrigger className="w-[120px] bg-white"><SelectValue placeholder="Year" /></SelectTrigger>
             <SelectContent>
-              {[2023, 2024, 2025, 2026].map(y => (
+              {uniqueYears.map(y => (
                 <SelectItem key={y} value={y.toString()}>{y}</SelectItem>
               ))}
             </SelectContent>
@@ -101,10 +107,10 @@ export default function YearlySummaryPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <StatCard title="Total Payroll Expenditure" value={formatCurrency(kpi.totalPayroll)} icon={Download} />
-        <StatCard title="Total Employees" value={kpi.totalEmployees.toString()} icon={Download} />
-        <StatCard title="Avg Monthly Payroll" value={formatCurrency(kpi.avgMonthly)} icon={Download} />
-        <StatCard title="Avg Salary" value={formatCurrency(kpi.avgSalary)} icon={Download} />
+        <StatCard title="Total Payroll Expenditure" value={formatCurrency(kpi.totalPayroll)} icon={Wallet} />
+        <StatCard title="Total Employees" value={kpi.totalEmployees.toString()} icon={Users} />
+        <StatCard title="Avg Monthly Payroll" value={formatCurrency(kpi.avgMonthly)} icon={TrendingUp} />
+        <StatCard title="Avg Salary" value={formatCurrency(kpi.avgSalary)} icon={BarChart3} />
       </div>
 
       <Card>

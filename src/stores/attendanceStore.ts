@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { AttendanceRecord, LeaveRequest, AttendanceStatus } from '@/lib/types';
-import { generateId } from '@/lib/utils';
+import { generateId, getLocalDateString } from '@/lib/utils';
+import { useEmployeeStore } from './employeeStore';
 
 interface AttendanceState {
   attendanceRecords: AttendanceRecord[];
@@ -72,7 +73,7 @@ export const useAttendanceStore = create<AttendanceState>()(
           ),
         })),
       checkIn: (employeeId, employeeName) => {
-        const today = new Date().toISOString().split('T')[0];
+        const today = getLocalDateString();
         const nowTime = new Date().toTimeString().substring(0, 5); // HH:mm
         const isLate = parseInt(nowTime.split(':')[0]) >= 9 && parseInt(nowTime.split(':')[1]) > 30; // 9:30 AM threshold
 
@@ -85,7 +86,7 @@ export const useAttendanceStore = create<AttendanceState>()(
         });
       },
       checkOut: (employeeId) => {
-        const today = new Date().toISOString().split('T')[0];
+        const today = getLocalDateString();
         const nowTime = new Date().toTimeString().substring(0, 5);
 
         set((state) => ({
@@ -108,6 +109,32 @@ export const useAttendanceStore = create<AttendanceState>()(
         }));
       },
       approveLeave: (id, approvedBy) => {
+        const targetLeave = get().leaveRequests.find((l) => l.id === id);
+        if (targetLeave && ['casual', 'sick', 'annual'].includes(targetLeave.leaveType)) {
+          useEmployeeStore.getState().deductLeaveBalance(
+            targetLeave.employeeId,
+            targetLeave.leaveType as 'casual' | 'sick' | 'annual',
+            targetLeave.daysCount
+          );
+        }
+
+        // Record on_leave attendance record for leave start date
+        if (targetLeave) {
+          const leaveDate = targetLeave.startDate;
+          const existing = get().attendanceRecords.find(
+            (r) => r.employeeId === targetLeave.employeeId && r.date === leaveDate
+          );
+          if (!existing) {
+            get().recordAttendance({
+              employeeId: targetLeave.employeeId,
+              employeeName: targetLeave.employeeName,
+              date: leaveDate,
+              status: 'on_leave',
+              notes: `Approved ${targetLeave.leaveType} leave`,
+            });
+          }
+        }
+
         set((state) => ({
           leaveRequests: state.leaveRequests.map((l) =>
             l.id === id
@@ -162,13 +189,26 @@ export const useAttendanceStore = create<AttendanceState>()(
           else if (r.status === 'on_leave') onLeave++;
         });
 
-        // Check approved unpaid leaves for this month
-        const unpaidLeaves = get().leaveRequests.filter((l) => {
-          if (l.employeeId !== employeeId || l.status !== 'approved' || l.leaveType !== 'unpaid') return false;
-          return l.startDate.startsWith(monthPrefix) || l.endDate.startsWith(monthPrefix);
-        });
+        // Check approved unpaid leaves overlapping this specific month
+        const targetMonthStart = new Date(year, month - 1, 1);
+        const targetMonthEnd = new Date(year, month, 0, 23, 59, 59, 999);
 
-        const unpaidLeaveDays = unpaidLeaves.reduce((sum, l) => sum + l.daysCount, 0);
+        let unpaidLeaveDays = 0;
+        const approvedUnpaid = get().leaveRequests.filter(
+          (l) => l.employeeId === employeeId && l.status === 'approved' && l.leaveType === 'unpaid'
+        );
+
+        approvedUnpaid.forEach((l) => {
+          const start = new Date(l.startDate);
+          const end = new Date(l.endDate);
+          if (start <= targetMonthEnd && end >= targetMonthStart) {
+            const effectiveStart = start > targetMonthStart ? start : targetMonthStart;
+            const effectiveEnd = end < targetMonthEnd ? end : targetMonthEnd;
+            const diffTime = effectiveEnd.getTime() - effectiveStart.getTime();
+            const days = Math.round(diffTime / (1000 * 60 * 60 * 24)) + 1;
+            unpaidLeaveDays += Math.max(0, Math.min(days, l.daysCount));
+          }
+        });
 
         return {
           present,

@@ -20,6 +20,12 @@ export default function DepartmentReportPage() {
   const [month, setMonth] = useState<string>((new Date().getMonth() + 1).toString());
   const [year, setYear] = useState<string>(new Date().getFullYear().toString());
 
+  const uniqueYears = useMemo(() => {
+    const set = new Set(payrolls.map((p) => p.year));
+    set.add(new Date().getFullYear());
+    return Array.from(set).sort((a, b) => b - a);
+  }, [payrolls]);
+
   const deptData = useMemo(() => {
     const data: Record<string, any> = {};
 
@@ -27,40 +33,39 @@ export default function DepartmentReportPage() {
 
     filteredPayrolls.forEach(p => {
       const emp = employees.find(e => e.id === p.employeeId);
-      if (emp) {
-        const deptName = emp.department || 'Unknown';
-        if (!data[deptName]) {
-          data[deptName] = {
-            id: deptName,
-            name: deptName,
-            employeeCount: 0,
-            totalBasic: 0,
-            totalAllowances: 0,
-            totalGross: 0,
-            totalDeductions: 0,
-            totalNet: 0,
-            maxSalary: 0,
-            minSalary: Infinity,
-            highestPaid: 'N/A',
-            lowestPaid: 'N/A'
-          };
-        }
-        const d = data[deptName];
-        d.employeeCount += 1;
-        d.totalBasic += p.basicSalary;
-        d.totalAllowances += p.allowances;
-        d.totalGross += p.grossSalary;
-        d.totalDeductions += p.totalDeductions;
-        d.totalNet += p.netSalary;
-        
-        if (p.netSalary > d.maxSalary) {
-          d.maxSalary = p.netSalary;
-          d.highestPaid = emp.fullName;
-        }
-        if (p.netSalary < d.minSalary) {
-          d.minSalary = p.netSalary;
-          d.lowestPaid = emp.fullName;
-        }
+      const deptName = p.department || emp?.department || 'General';
+      if (!data[deptName]) {
+        data[deptName] = {
+          id: deptName,
+          name: deptName,
+          employeeCount: 0,
+          totalBasic: 0,
+          totalAllowances: 0,
+          totalGross: 0,
+          totalDeductions: 0,
+          totalNet: 0,
+          maxSalary: 0,
+          minSalary: Infinity,
+          highestPaid: 'N/A',
+          lowestPaid: 'N/A'
+        };
+      }
+      const d = data[deptName];
+      d.employeeCount += 1;
+      d.totalBasic += p.basicSalary;
+      d.totalAllowances += p.allowances;
+      d.totalGross += p.grossSalary;
+      d.totalDeductions += p.totalDeductions;
+      d.totalNet += p.netSalary;
+      
+      const empName = p.employeeName || emp?.fullName || 'Employee';
+      if (p.netSalary > d.maxSalary) {
+        d.maxSalary = p.netSalary;
+        d.highestPaid = empName;
+      }
+      if (p.netSalary < d.minSalary) {
+        d.minSalary = p.netSalary;
+        d.lowestPaid = empName;
       }
     });
 
@@ -101,7 +106,7 @@ export default function DepartmentReportPage() {
           <Select value={year} onValueChange={setYear}>
             <SelectTrigger className="w-[180px]"><SelectValue placeholder="Year" /></SelectTrigger>
             <SelectContent>
-              {[2023, 2024, 2025, 2026].map(y => (
+              {uniqueYears.map(y => (
                 <SelectItem key={y} value={y.toString()}>{y}</SelectItem>
               ))}
             </SelectContent>
@@ -135,7 +140,7 @@ export default function DepartmentReportPage() {
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie data={deptData} dataKey="totalNet" nameKey="name" cx="50%" cy="50%" outerRadius={100} label>
-                  {deptData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
+                  {deptData.map((_, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
                 </Pie>
                 <Tooltip formatter={(value: number) => formatCurrency(value)} />
                 <Legend />

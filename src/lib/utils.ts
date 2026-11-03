@@ -30,11 +30,13 @@ export function roundCurrency(amount: number): number {
 }
 
 export function formatCurrency(amount: number = 0, symbol: string = '৳'): string {
-  const safeAmount = isNaN(amount) ? 0 : amount;
-  return `${symbol}${safeAmount.toLocaleString('en-IN', {
+  const safeAmount = isNaN(amount) || !isFinite(amount) ? 0 : amount;
+  const isNegative = safeAmount < 0;
+  const absoluteFormatted = Math.abs(safeAmount).toLocaleString('en-IN', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  })}`;
+  });
+  return `${isNegative ? '-' : ''}${symbol}${absoluteFormatted}`;
 }
 
 export function getInitials(name: string): string {
@@ -54,4 +56,14 @@ export function getMonthName(month: number): string {
 export function getMonthYear(month: number, year: number): string {
   const monthName = getMonthName(month);
   return `${monthName} ${year}`;
+}
+
+/**
+ * Returns YYYY-MM-DD formatted string in local time, preventing UTC midnight date skews.
+ */
+export function getLocalDateString(date: Date = new Date()): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }

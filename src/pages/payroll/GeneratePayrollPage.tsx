@@ -74,6 +74,14 @@ export default function GeneratePayrollPage() {
 
   const existingPayrolls = getPayrollByMonth(monthNum, yearNum);
   const hasExisting = existingPayrolls.length > 0;
+  const alreadyProcessedEmpIds = useMemo(() => {
+    return new Set(
+      existingPayrolls
+        .filter((p) => p.status === 'approved' || p.status === 'paid')
+        .map((p) => p.employeeId)
+    );
+  }, [existingPayrolls]);
+
   const activeEmployees = useMemo(
     () => employees.filter((e) => e.status === 'active'),
     [employees]
@@ -101,7 +109,9 @@ export default function GeneratePayrollPage() {
     });
 
     setAdjustments(initialAdjustments);
-    setSelectedEmployees(activeEmployees.map((e) => e.id));
+    setSelectedEmployees(
+      activeEmployees.filter((e) => !alreadyProcessedEmpIds.has(e.id)).map((e) => e.id)
+    );
     setStep(2);
   };
 
@@ -147,7 +157,9 @@ export default function GeneratePayrollPage() {
 
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
-      setSelectedEmployees(activeEmployees.map((e) => e.id));
+      setSelectedEmployees(
+        activeEmployees.filter((e) => !alreadyProcessedEmpIds.has(e.id)).map((e) => e.id)
+      );
     } else {
       setSelectedEmployees([]);
     }
@@ -451,18 +463,28 @@ export default function GeneratePayrollPage() {
                     absenceDeduction,
                     dailyRate,
                     loanInstallment,
-                  }) => (
-                    <TableRow key={employee.id}>
+                  }) => {
+                    const isAlreadyProcessed = alreadyProcessedEmpIds.has(employee.id);
+                    return (
+                    <TableRow key={employee.id} className={isAlreadyProcessed ? 'opacity-60 bg-slate-50/70' : ''}>
                       <TableCell>
                         <Checkbox
                           checked={selectedEmployees.includes(employee.id)}
+                          disabled={isAlreadyProcessed}
                           onCheckedChange={(checked) =>
                             handleSelectEmployee(employee.id, checked as boolean)
                           }
                         />
                       </TableCell>
                       <TableCell>
-                        <div className="font-medium text-slate-900">{employee.fullName}</div>
+                        <div className="flex items-center gap-2">
+                          <div className="font-medium text-slate-900">{employee.fullName}</div>
+                          {isAlreadyProcessed && (
+                            <span className="text-[10px] bg-emerald-100 text-emerald-800 font-semibold px-1.5 py-0.5 rounded">
+                              Already Processed
+                            </span>
+                          )}
+                        </div>
                         <div className="text-xs text-slate-500">{employee.department}</div>
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
@@ -533,8 +555,8 @@ export default function GeneratePayrollPage() {
                         <CurrencyDisplay amount={net} />
                       </TableCell>
                     </TableRow>
-                  )
-                )}
+                  );
+                })}
               </TableBody>
             </Table>
           </div>

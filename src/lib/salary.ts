@@ -70,7 +70,8 @@ export function calculateOvertimePay(
   workingDays: number = 22
 ): number {
   if (overtimeHours <= 0 || basicSalary <= 0) return 0;
-  const hourlyRate = basicSalary / (workingDays * 8);
+  const safeDays = workingDays > 0 && isFinite(workingDays) ? workingDays : 22;
+  const hourlyRate = basicSalary / (safeDays * 8);
   return roundCurrency(overtimeHours * hourlyRate * multiplier);
 }
 
@@ -83,7 +84,8 @@ export function calculateUnpaidLeaveDeduction(
   workingDays: number = 22
 ): number {
   if (unpaidDays <= 0 || basicSalary <= 0) return 0;
-  const perDayRate = basicSalary / workingDays;
+  const safeDays = workingDays > 0 && isFinite(workingDays) ? workingDays : 22;
+  const perDayRate = basicSalary / safeDays;
   return roundCurrency(unpaidDays * perDayRate);
 }
 
@@ -147,7 +149,14 @@ export function calculateFullSalary(
   const overtime = employee.overtime || 0;
   const deductions = employee.deductions || 0;
   const tax = employee.tax || 0;
-  const unpaidDays = employee.absentDays !== undefined ? employee.absentDays : (employee.unpaidLeaveDays || 0);
+  const absentCount = employee.absentDays ?? 0;
+  const unpaidCount = employee.unpaidLeaveDays ?? 0;
+  const unpaidDays =
+    employee.absentDays !== undefined &&
+    employee.unpaidLeaveDays !== undefined &&
+    employee.absentDays === employee.unpaidLeaveDays
+      ? employee.absentDays
+      : absentCount + unpaidCount;
   const loanInstallment = employee.loanInstallment || 0;
   const workingDays = settings?.standardWorkingDays || 22;
 

@@ -48,11 +48,10 @@ type FormData = z.infer<typeof schema>;
 
 export default function AddEmployeePage() {
   const navigate = useNavigate();
-  const { addEmployee, employees } = useEmployeeStore();
+  const { addEmployee, getNextEmployeeId } = useEmployeeStore();
   const { departments } = useDepartmentStore();
 
-  const nextIdNum = employees.length + 1;
-  const employeeId = generateEmployeeId(nextIdNum - 1);
+  const employeeId = getNextEmployeeId();
 
   const {
     register,

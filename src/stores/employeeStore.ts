@@ -11,6 +11,8 @@ interface EmployeeState {
   toggleEmployeeStatus: (id: string) => void;
   addDocument: (employeeId: string, document: Omit<EmployeeDocument, 'id' | 'uploadDate'>) => void;
   deleteDocument: (employeeId: string, documentId: string) => void;
+  deductLeaveBalance: (employeeId: string, leaveType: 'casual' | 'sick' | 'annual', days: number) => void;
+  updateDepartmentName: (oldName: string, newName: string) => void;
   getEmployeeById: (id: string) => Employee | undefined;
   getEmployeesByDepartment: (dept: string) => Employee[];
   getActiveEmployees: () => Employee[];
@@ -23,8 +25,7 @@ export const useEmployeeStore = create<EmployeeState>()(
     (set, get) => ({
       employees: [],
       addEmployee: (employeeData) => {
-        const stateEmployees = get().employees;
-        const newId = generateEmployeeId(stateEmployees.length);
+        const newId = get().getNextEmployeeId();
         const now = new Date().toISOString();
         const newEmployee: Employee = {
           ...employeeData,
@@ -91,6 +92,31 @@ export const useEmployeeStore = create<EmployeeState>()(
             };
           }),
         })),
+      deductLeaveBalance: (employeeId, leaveType, days) =>
+        set((state) => ({
+          employees: state.employees.map((emp) => {
+            if (emp.id !== employeeId && emp.employeeId !== employeeId) return emp;
+            const currentBalance = emp.leaveBalance || { casual: 10, sick: 14, annual: 15 };
+            const currentTypeDays = currentBalance[leaveType] ?? 0;
+            const newTypeDays = Math.max(0, currentTypeDays - days);
+            return {
+              ...emp,
+              leaveBalance: {
+                ...currentBalance,
+                [leaveType]: newTypeDays,
+              },
+              updatedAt: new Date().toISOString(),
+            };
+          }),
+        })),
+      updateDepartmentName: (oldName, newName) =>
+        set((state) => ({
+          employees: state.employees.map((emp) =>
+            emp.department === oldName
+              ? { ...emp, department: newName, updatedAt: new Date().toISOString() }
+              : emp
+          ),
+        })),
       getEmployeeById: (id) => {
         return get().employees.find((emp) => emp.id === id || emp.employeeId === id);
       },
@@ -111,7 +137,17 @@ export const useEmployeeStore = create<EmployeeState>()(
         );
       },
       getNextEmployeeId: () => {
-        return generateEmployeeId(get().employees.length);
+        let maxNum = 0;
+        get().employees.forEach((e) => {
+          const match = e.employeeId?.match(/EMP-(\d+)/i);
+          if (match) {
+            const num = parseInt(match[1], 10);
+            if (!isNaN(num) && num > maxNum) {
+              maxNum = num;
+            }
+          }
+        });
+        return `EMP-${String(maxNum + 1).padStart(3, '0')}`;
       },
     }),
     {

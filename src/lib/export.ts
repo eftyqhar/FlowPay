@@ -3,14 +3,16 @@ import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 
 export function exportToCSV(data: Record<string, unknown>[], filename: string): void {
-  const worksheet = xlsx.utils.json_to_sheet(data);
+  const safeData = data && data.length > 0 ? data : [{ 'No Records': 'No data available' }];
+  const worksheet = xlsx.utils.json_to_sheet(safeData);
   const workbook = xlsx.utils.book_new();
   xlsx.utils.book_append_sheet(workbook, worksheet, 'Sheet1');
   xlsx.writeFile(workbook, `${filename}.csv`);
 }
 
 export function exportToExcel(data: Record<string, unknown>[], filename: string, sheetName: string = 'Sheet1'): void {
-  const worksheet = xlsx.utils.json_to_sheet(data);
+  const safeData = data && data.length > 0 ? data : [{ 'No Records': 'No data available' }];
+  const worksheet = xlsx.utils.json_to_sheet(safeData);
   const workbook = xlsx.utils.book_new();
   xlsx.utils.book_append_sheet(workbook, worksheet, sheetName);
   xlsx.writeFile(workbook, `${filename}.xlsx`);
