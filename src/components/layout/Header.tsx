@@ -23,7 +23,7 @@ export function Header() {
   const location = useLocation();
   const navigate = useNavigate();
   const { currentUser: user, logout } = useAuthStore();
-  const { notifications, markAsRead, markAllAsRead, getUnreadCount } = useNotificationStore();
+  const { notifications, markAsRead, markAllAsRead, getUserNotifications, getUnreadCount } = useNotificationStore();
   const { employees } = useEmployeeStore();
 
   const [showDropdown, setShowDropdown] = useState(false);
@@ -31,7 +31,22 @@ export function Header() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearchResults, setShowSearchResults] = useState(false);
 
-  const unreadCount = getUnreadCount();
+  const myEmployee = React.useMemo(() => {
+    return employees.find(
+      (e) =>
+        e.employeeId === user?.employeeId ||
+        e.email.toLowerCase() === user?.email.toLowerCase() ||
+        e.fullName.toLowerCase() === user?.name.toLowerCase()
+    );
+  }, [employees, user]);
+
+  const userNotifications = React.useMemo(() => {
+    return getUserNotifications(user, myEmployee?.id);
+  }, [getUserNotifications, user, myEmployee, notifications]);
+
+  const unreadCount = React.useMemo(() => {
+    return getUnreadCount(user, myEmployee?.id);
+  }, [getUnreadCount, user, myEmployee, notifications]);
 
   const searchResults = React.useMemo(() => {
     if (!searchQuery.trim()) return [];
@@ -161,7 +176,7 @@ export function Header() {
                   </div>
                   {unreadCount > 0 && (
                     <button
-                      onClick={markAllAsRead}
+                      onClick={() => markAllAsRead(user, myEmployee?.id)}
                       className="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
                     >
                       Mark all as read
@@ -170,12 +185,12 @@ export function Header() {
                 </div>
 
                 <div className="max-h-72 overflow-y-auto divide-y divide-slate-100">
-                  {notifications.length === 0 ? (
+                  {userNotifications.length === 0 ? (
                     <div className="p-6 text-center text-xs text-slate-400">
                       No notifications at this time.
                     </div>
                   ) : (
-                    notifications.map((n) => (
+                    userNotifications.map((n) => (
                       <div
                         key={n.id}
                         onClick={() => {

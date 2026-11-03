@@ -8,9 +8,10 @@ import {
   calculateFullSalary,
   roundCurrency,
 } from '@/lib/salary';
-import { generateId } from '@/lib/utils';
+import { generateId, getMonthName } from '@/lib/utils';
 import { useSettingsStore } from './settingsStore';
 import { useLoanStore } from './loanStore';
+import { useNotificationStore } from './notificationStore';
 
 export interface SalaryTrend {
   month: string;
@@ -152,6 +153,10 @@ export const usePayrollStore = create<PayrollState>()(
       },
       approvePayroll: (ids, approvedBy) => {
         const now = new Date().toISOString();
+        const recordsToApprove = get().payrollRecords.filter(
+          (r) => ids.includes(r.id) && r.status === 'draft'
+        );
+
         set((state) => ({
           payrollRecords: state.payrollRecords.map((record) =>
             ids.includes(record.id) && record.status === 'draft'
@@ -159,6 +164,17 @@ export const usePayrollStore = create<PayrollState>()(
               : record
           ),
         }));
+
+        // Notify each employee
+        recordsToApprove.forEach((rec) => {
+          useNotificationStore.getState().addNotification({
+            title: `Salary Approved — ${getMonthName(rec.month)} ${rec.year}`,
+            message: `Your salary payslip of ৳${rec.netSalary.toLocaleString()} has been approved and queued for payment.`,
+            type: 'info',
+            link: `/payslips/${rec.id}`,
+            targetEmployeeId: rec.employeeId,
+          });
+        });
       },
       markAsPaid: (ids, paidBy, paymentMethod, transactionRef) => {
         const now = new Date().toISOString();
@@ -180,6 +196,15 @@ export const usePayrollStore = create<PayrollState>()(
               record.loanDeduction
             );
           }
+
+          // Notify employee of payment
+          useNotificationStore.getState().addNotification({
+            title: `Salary Disbursed — ${getMonthName(record.month)} ${record.year}`,
+            message: `Your net salary of ৳${record.netSalary.toLocaleString()} has been disbursed via ${paymentMethod.toUpperCase()}. Ref: ${txRef}.`,
+            type: 'success',
+            link: `/payslips/${record.id}`,
+            targetEmployeeId: record.employeeId,
+          });
         });
 
         set((state) => ({

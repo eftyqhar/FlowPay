@@ -267,4 +267,7 @@ export interface NotificationItem {
   type: 'info' | 'success' | 'warning' | 'alert';
   isRead: boolean;
   link?: string;
+  targetRoles?: UserRole[];
+  targetUserId?: string;
+  targetEmployeeId?: string;
 }

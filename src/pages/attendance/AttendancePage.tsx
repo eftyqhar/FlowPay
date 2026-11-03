@@ -47,6 +47,7 @@ import { useAttendanceStore } from '@/stores/attendanceStore';
 import { useEmployeeStore } from '@/stores/employeeStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useAuditStore } from '@/stores/auditStore';
+import { useNotificationStore } from '@/stores/notificationStore';
 import { ATTENDANCE_STATUSES, LEAVE_STATUSES } from '@/lib/constants';
 import { formatDate, getLocalDateString } from '@/lib/utils';
 import { AttendanceStatus, LeaveType } from '@/lib/types';
@@ -66,6 +67,7 @@ export default function AttendancePage() {
   const { employees } = useEmployeeStore();
   const { currentUser } = useAuthStore();
   const { addLog } = useAuditStore();
+  const { addNotification } = useNotificationStore();
 
   const userRole = (currentUser?.role || '').toLowerCase();
   const isEmployee = userRole === 'employee';
@@ -76,7 +78,8 @@ export default function AttendancePage() {
     return employees.find(
       (e) =>
         e.employeeId === currentUser?.employeeId ||
-        e.email.toLowerCase() === currentUser?.email.toLowerCase()
+        e.email.toLowerCase() === currentUser?.email.toLowerCase() ||
+        e.fullName.toLowerCase() === currentUser?.name?.toLowerCase()
     );
   }, [employees, currentUser]);
 
@@ -150,7 +153,8 @@ export default function AttendancePage() {
 
   const handleApplyLeave = (e: React.FormEvent) => {
     e.preventDefault();
-    const emp = employees.find((e) => e.id === leaveEmployeeId) || myEmployee;
+    const selectedEmpId = isEmployee ? myEmployee?.id : (leaveEmployeeId || employees[0]?.id);
+    const emp = employees.find((e) => e.id === selectedEmpId) || myEmployee;
     if (!emp) {
       toast.error('Please select an employee');
       return;
@@ -169,6 +173,15 @@ export default function AttendancePage() {
       endDate,
       daysCount: Math.max(1, daysCount),
       reason: reason.trim(),
+    });
+
+    // Notify Admins, Owner & HR
+    addNotification({
+      title: 'New Leave Request Received',
+      message: `${emp.fullName} (${emp.department}) requested ${Math.max(1, daysCount)} day(s) of ${leaveType.toUpperCase()} leave (${formatDate(startDate)} to ${formatDate(endDate)}).`,
+      type: 'info',
+      link: '/attendance',
+      targetRoles: ['admin', 'owner', 'hr'],
     });
 
     addLog({
@@ -222,6 +235,16 @@ export default function AttendancePage() {
 
   const handleApproveLeave = (req: any) => {
     approveLeave(req.id, currentUser?.name || 'HR Manager');
+
+    // Notify the employee
+    addNotification({
+      title: 'Leave Request Approved',
+      message: `Your request for ${req.daysCount} day(s) of ${req.leaveType.toUpperCase()} leave has been approved by ${currentUser?.name || 'HR Manager'}.`,
+      type: 'success',
+      link: '/attendance',
+      targetEmployeeId: req.employeeId,
+    });
+
     addLog({
       userId: currentUser?.id || 'USR-004',
       userName: currentUser?.name || 'HR Manager',
@@ -244,6 +267,16 @@ export default function AttendancePage() {
 
     const reason = rejectionReasonInput.trim() || 'Operational workload constraints';
     rejectLeave(rejectingLeaveReq.id, reason, currentUser?.name || 'HR Manager');
+
+    // Notify the employee
+    addNotification({
+      title: 'Leave Request Rejected',
+      message: `Your request for ${rejectingLeaveReq.daysCount} day(s) of ${rejectingLeaveReq.leaveType.toUpperCase()} leave was rejected: ${reason}`,
+      type: 'warning',
+      link: '/attendance',
+      targetEmployeeId: rejectingLeaveReq.employeeId,
+    });
+
     addLog({
       userId: currentUser?.id || 'USR-004',
       userName: currentUser?.name || 'HR Manager',
