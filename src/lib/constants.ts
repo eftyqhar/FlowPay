@@ -71,16 +71,41 @@ export const DEFAULT_COMPANY_SETTINGS: CompanySettings = {
   currency: 'BDT',
   currencySymbol: '৳',
   fiscalYearStart: 7, // July
-  defaultAllowancePercent: 10,
-  defaultTaxPercent: 5,
+  defaultAllowancePercent: 15,
+  defaultTaxPercent: 0, // Default 0% tax per user request
   paymentMethods: ['bank_transfer', 'cash', 'check', 'mobile_banking'],
   minimumWage: 12500,
   overtimeMultiplier: 1.5,
-  pfEmployeePercent: 8.33,
-  pfEmployerPercent: 8.33,
+  pfEmployeePercent: 0,
+  pfEmployerPercent: 0,
   taxFreeThreshold: 350000,
   standardWorkingDays: 22,
   autoDeductAbsenceDays: true,
+
+  // Recommended configurations
+  payrollFrequency: 'monthly',
+  salaryPaymentDate: 1,
+  dailyWorkingHours: 8,
+  weeklyHoliday: 'friday',
+  halfDayDeduction: true,
+  lateDeductionRules: {
+    enabled: true,
+    graceMinutes: 15,
+    lateDaysThreshold: 3,
+    deductionDays: 1,
+  },
+  paidLeaveDeduction: 0,
+  unpaidLeaveDeduction: true,
+  overtimeApprovalRequired: true,
+  festivalBonusConfig: {
+    enabled: true,
+    type: 'percentage',
+    value: 50,
+    frequencyPerYear: 2,
+  },
+  salaryAdvanceEnabled: true,
+  loanDeductionEnabled: true,
+  salaryRoundingDecimals: 2,
 };
 
 export const PERMISSIONS: Record<UserRole, string[]> = {

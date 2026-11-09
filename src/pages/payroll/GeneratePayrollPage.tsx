@@ -29,7 +29,7 @@ import { useLoanStore } from '@/stores/loanStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useAuditStore } from '@/stores/auditStore';
 import { useSettingsStore } from '@/stores/settingsStore';
-import { calculateFullSalary, roundCurrency } from '@/lib/salary';
+import { calculateFullSalary, calculateOvertimePay, roundCurrency } from '@/lib/salary';
 import { getMonthName, getMonthYear, formatCurrency } from '@/lib/utils';
 import { AlertCircle, CheckCircle, ArrowRight, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
@@ -93,18 +93,45 @@ export default function GeneratePayrollPage() {
       return;
     }
 
-    // Auto-populate adjustments from attendance and loan stores
+    // Auto-populate adjustments from attendance, loan, festival bonus, and overtime detection
     const initialAdjustments: Record<string, any> = {};
     activeEmployees.forEach((emp) => {
       const summary = getMonthlyEmployeeSummary(emp.id, monthNum, yearNum);
       const activeLoan = getActiveLoan(emp.id);
       const totalAbsenceDays = (summary.absent || 0) + (summary.unpaidLeaveDays || 0);
 
+      // Overtime Pay calculation based on 8h Daily Working Hours and overtime multiplier
+      const detectedOtHours = summary.overtimeHours || 0;
+      const detectedOtPay = detectedOtHours > 0
+        ? calculateOvertimePay(
+            emp.basicSalary,
+            detectedOtHours,
+            settings?.overtimeMultiplier || 1.5,
+            settings?.standardWorkingDays || 22,
+            settings?.dailyWorkingHours || 8
+          )
+        : (emp.overtime || 0);
+
+      // Festival Bonus auto-application if enabled in settings
+      let bonusAmount = emp.bonus || 0;
+      if (settings?.festivalBonusConfig?.enabled) {
+        const fest = settings.festivalBonusConfig;
+        const festBonus = fest.type === 'percentage'
+          ? (emp.basicSalary * (fest.value || 0)) / 100
+          : (fest.value || 0);
+        bonusAmount += roundCurrency(festBonus);
+      }
+
+      // Loan deduction check (respects loanDeductionEnabled switch)
+      const loanDeduction = (settings?.loanDeductionEnabled ?? true) && activeLoan
+        ? Math.min(activeLoan.monthlyInstallment, activeLoan.remainingBalance)
+        : 0;
+
       initialAdjustments[emp.id] = {
-        bonus: emp.bonus || 0,
-        overtime: emp.overtime || 0,
+        bonus: bonusAmount,
+        overtime: detectedOtPay,
         unpaidLeaveDays: autoDeductAbsence ? totalAbsenceDays : 0,
-        loanInstallment: activeLoan ? Math.min(activeLoan.monthlyInstallment, activeLoan.remainingBalance) : 0,
+        loanInstallment: loanDeduction,
       };
     });
 
@@ -201,6 +228,8 @@ export default function GeneratePayrollPage() {
       const workingDays = settings?.standardWorkingDays || 22;
       const dailyRate = roundCurrency(emp.basicSalary / workingDays);
 
+      const summary = getMonthlyEmployeeSummary(emp.id, monthNum, yearNum);
+
       return {
         employee: emp,
         gross: calc.grossSalary,
@@ -210,11 +239,12 @@ export default function GeneratePayrollPage() {
         net: calc.netSalary,
         bonus: adj.bonus,
         overtime: adj.overtime,
+        detectedOtHours: summary.overtimeHours || 0,
         unpaidLeaveDays: adj.unpaidLeaveDays,
         loanInstallment: adj.loanInstallment,
       };
     });
-  }, [activeEmployees, adjustments, settings]);
+  }, [activeEmployees, adjustments, settings, monthNum, yearNum, getMonthlyEmployeeSummary]);
 
   const selectedCalculations = calculatedSalaries.filter((c) =>
     selectedEmployees.includes(c.employee.id)
@@ -459,6 +489,7 @@ export default function GeneratePayrollPage() {
                     net,
                     bonus,
                     overtime,
+                    detectedOtHours,
                     unpaidLeaveDays,
                     absenceDeduction,
                     dailyRate,
@@ -511,6 +542,11 @@ export default function GeneratePayrollPage() {
                             handleAdjustmentChange(employee.id, 'overtime', e.target.value)
                           }
                         />
+                        {detectedOtHours > 0 && (
+                          <div className="text-[10px] text-indigo-600 text-right font-medium mt-0.5">
+                            {detectedOtHours}h detected ({settings?.dailyWorkingHours || 8}h/d)
+                          </div>
+                        )}
                       </TableCell>
                       <TableCell>
                         <Input

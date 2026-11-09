@@ -262,27 +262,55 @@ export const payrollToRow = (p: Partial<PayrollRecord>) => ({
 });
 
 // 7. Company Settings
-export const rowToSettings = (row: any): CompanySettings => ({
-  name: row.name || 'FlowPay Inc.',
-  logo: row.logo || undefined,
-  address: row.address || 'Dhaka, Bangladesh',
-  phone: row.phone || '+880 1700-000000',
-  email: row.email || 'contact@flowpay.com',
-  website: row.website || 'https://flowpay.com',
-  currency: row.currency || 'BDT',
-  currencySymbol: row.currency_symbol || '৳',
-  fiscalYearStart: Number(row.financial_year_start) || 1,
-  defaultAllowancePercent: 20,
-  defaultTaxPercent: 5,
-  paymentMethods: ['bank_transfer', 'mobile_banking', 'cash'],
-  minimumWage: Number(row.minimum_wage) || 12000,
-  overtimeMultiplier: Number(row.overtime_multiplier) || 1.5,
-  pfEmployeePercent: Number(row.pf_employee_percent) || 10,
-  pfEmployerPercent: Number(row.pf_employer_percent) || 10,
-  taxFreeThreshold: Number(row.tax_free_threshold) || 350000,
-  standardWorkingDays: Number(row.standard_working_days) || 22,
-  autoDeductAbsenceDays: row.auto_deduct_absence_days ?? true,
-});
+export const rowToSettings = (row: any): CompanySettings => {
+  const rules = row.rules_config || {};
+  return {
+    name: row.name || 'FlowPay Inc.',
+    logo: row.logo || undefined,
+    address: row.address || 'Dhaka, Bangladesh',
+    phone: row.phone || '+880 1700-000000',
+    email: row.email || 'contact@flowpay.com',
+    website: row.website || 'https://flowpay.com',
+    currency: row.currency || 'BDT',
+    currencySymbol: row.currency_symbol || '৳',
+    fiscalYearStart: Number(row.financial_year_start) || 1,
+    defaultAllowancePercent: Number(rules.defaultAllowancePercent ?? 15),
+    defaultTaxPercent: Number(rules.defaultTaxPercent ?? 0), // Default 0% tax as requested
+    paymentMethods: rules.paymentMethods || ['bank_transfer', 'mobile_banking', 'cash'],
+    minimumWage: Number(row.minimum_wage) || 12500,
+    overtimeMultiplier: Number(row.overtime_multiplier) || 1.5,
+    pfEmployeePercent: Number(row.pf_employee_percent) || 0,
+    pfEmployerPercent: Number(row.pf_employer_percent) || 0,
+    taxFreeThreshold: Number(row.tax_free_threshold) || 350000,
+    standardWorkingDays: Number(row.standard_working_days) || 22,
+    autoDeductAbsenceDays: row.auto_deduct_absence_days ?? (rules.autoDeductAbsenceDays ?? true),
+
+    // Recommended configurations
+    payrollFrequency: rules.payrollFrequency || 'monthly',
+    salaryPaymentDate: Number(rules.salaryPaymentDate || row.pay_day || 1),
+    dailyWorkingHours: Number(rules.dailyWorkingHours || 8),
+    weeklyHoliday: rules.weeklyHoliday || 'friday',
+    halfDayDeduction: rules.halfDayDeduction ?? true,
+    lateDeductionRules: rules.lateDeductionRules || {
+      enabled: true,
+      graceMinutes: 15,
+      lateDaysThreshold: 3,
+      deductionDays: 1,
+    },
+    paidLeaveDeduction: Number(rules.paidLeaveDeduction ?? 0),
+    unpaidLeaveDeduction: rules.unpaidLeaveDeduction ?? true,
+    overtimeApprovalRequired: rules.overtimeApprovalRequired ?? true,
+    festivalBonusConfig: rules.festivalBonusConfig || {
+      enabled: true,
+      type: 'percentage',
+      value: 50,
+      frequencyPerYear: 2,
+    },
+    salaryAdvanceEnabled: rules.salaryAdvanceEnabled ?? true,
+    loanDeductionEnabled: rules.loanDeductionEnabled ?? true,
+    salaryRoundingDecimals: Number(rules.salaryRoundingDecimals || 2),
+  };
+};
 
 export const settingsToRow = (s: Partial<CompanySettings>) => ({
   name: s.name,
@@ -294,6 +322,7 @@ export const settingsToRow = (s: Partial<CompanySettings>) => ({
   currency: s.currency,
   currency_symbol: s.currencySymbol,
   financial_year_start: s.fiscalYearStart ? String(s.fiscalYearStart) : '1',
+  pay_day: s.salaryPaymentDate || 1,
   minimum_wage: s.minimumWage,
   overtime_multiplier: s.overtimeMultiplier,
   pf_employee_percent: s.pfEmployeePercent,
@@ -301,6 +330,25 @@ export const settingsToRow = (s: Partial<CompanySettings>) => ({
   tax_free_threshold: s.taxFreeThreshold,
   standard_working_days: s.standardWorkingDays,
   auto_deduct_absence_days: s.autoDeductAbsenceDays,
+  rules_config: {
+    defaultAllowancePercent: s.defaultAllowancePercent,
+    defaultTaxPercent: s.defaultTaxPercent ?? 0,
+    paymentMethods: s.paymentMethods,
+    payrollFrequency: s.payrollFrequency,
+    salaryPaymentDate: s.salaryPaymentDate,
+    dailyWorkingHours: s.dailyWorkingHours,
+    weeklyHoliday: s.weeklyHoliday,
+    halfDayDeduction: s.halfDayDeduction,
+    lateDeductionRules: s.lateDeductionRules,
+    paidLeaveDeduction: s.paidLeaveDeduction,
+    unpaidLeaveDeduction: s.unpaidLeaveDeduction,
+    overtimeApprovalRequired: s.overtimeApprovalRequired,
+    festivalBonusConfig: s.festivalBonusConfig,
+    salaryAdvanceEnabled: s.salaryAdvanceEnabled,
+    loanDeductionEnabled: s.loanDeductionEnabled,
+    salaryRoundingDecimals: s.salaryRoundingDecimals,
+    autoDeductAbsenceDays: s.autoDeductAbsenceDays,
+  },
   updated_at: new Date().toISOString(),
 });
 

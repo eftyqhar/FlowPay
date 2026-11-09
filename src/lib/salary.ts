@@ -62,16 +62,19 @@ export function calculateNet(grossSalary: number, totalDeductions: number): numb
 
 /**
  * Computes Overtime pay based on hourly rate.
+ * Hourly rate = basicSalary / (standardWorkingDays * dailyWorkingHours)
  */
 export function calculateOvertimePay(
   basicSalary: number,
   overtimeHours: number,
   multiplier: number = 1.5,
-  workingDays: number = 22
+  workingDays: number = 22,
+  dailyWorkingHours: number = 8
 ): number {
   if (overtimeHours <= 0 || basicSalary <= 0) return 0;
   const safeDays = workingDays > 0 && isFinite(workingDays) ? workingDays : 22;
-  const hourlyRate = basicSalary / (safeDays * 8);
+  const safeHours = dailyWorkingHours > 0 && isFinite(dailyWorkingHours) ? dailyWorkingHours : 8;
+  const hourlyRate = basicSalary / (safeDays * safeHours);
   return roundCurrency(overtimeHours * hourlyRate * multiplier);
 }
 
@@ -118,6 +121,8 @@ export interface FullSalaryCalculationInput {
   tax?: number;
   unpaidLeaveDays?: number;
   absentDays?: number;
+  halfDays?: number;
+  lateDays?: number;
   loanInstallment?: number;
   isPfEligible?: boolean;
   settings?: Partial<CompanySettings>;
@@ -138,6 +143,8 @@ export function calculateFullSalary(
   employee: Pick<Employee, 'basicSalary' | 'allowances' | 'bonus' | 'overtime' | 'deductions' | 'tax'> & {
     unpaidLeaveDays?: number;
     absentDays?: number;
+    halfDays?: number;
+    lateDays?: number;
     loanInstallment?: number;
     pfEligible?: boolean;
   },
@@ -148,38 +155,60 @@ export function calculateFullSalary(
   const bonus = employee.bonus || 0;
   const overtime = employee.overtime || 0;
   const deductions = employee.deductions || 0;
+
+  // Tax handling: default to 0% unless explicitly configured
   const tax = employee.tax || 0;
-  const absentCount = employee.absentDays ?? 0;
-  const unpaidCount = employee.unpaidLeaveDays ?? 0;
-  const unpaidDays =
-    employee.absentDays !== undefined &&
-    employee.unpaidLeaveDays !== undefined &&
-    employee.absentDays === employee.unpaidLeaveDays
-      ? employee.absentDays
-      : absentCount + unpaidCount;
-  const loanInstallment = employee.loanInstallment || 0;
+
   const workingDays = settings?.standardWorkingDays || 22;
+  const perDayRate = workingDays > 0 ? basic / workingDays : 0;
 
-  const grossSalary = calculateGross(basic, allowances, bonus, overtime);
+  // Unpaid leave deduction
+  const unpaidCount = employee.unpaidLeaveDays ?? 0;
+  const unpaidDeduction = (settings?.unpaidLeaveDeduction ?? true)
+    ? roundCurrency(unpaidCount * perDayRate)
+    : 0;
 
-  // Unpaid leave / absence deduction
-  const leaveDeduction = calculateAbsenceDeduction(basic, unpaidDays, workingDays);
+  // Absent days deduction
+  const absentCount = employee.absentDays ?? 0;
+  const absenceDeduction = (settings?.autoDeductAbsenceDays ?? true)
+    ? roundCurrency(absentCount * perDayRate)
+    : 0;
 
-  // PF calculation
+  // Half-day deduction (0.5 day rate per half day attendance)
+  const halfDaysCount = employee.halfDays ?? 0;
+  const halfDayDeduction = (settings?.halfDayDeduction ?? true)
+    ? roundCurrency(halfDaysCount * 0.5 * perDayRate)
+    : 0;
+
+  // Late arrival deduction (configurable threshold, e.g. 3 lates = 1 day penalty)
+  const lateCount = employee.lateDays ?? 0;
+  let lateDeduction = 0;
+  if (settings?.lateDeductionRules?.enabled && settings.lateDeductionRules.lateDaysThreshold > 0) {
+    const penaltyUnits = Math.floor(lateCount / settings.lateDeductionRules.lateDaysThreshold);
+    lateDeduction = roundCurrency(
+      penaltyUnits * (settings.lateDeductionRules.deductionDays || 1) * perDayRate
+    );
+  }
+
+  const leaveDeduction = roundCurrency(unpaidDeduction + absenceDeduction + halfDayDeduction + lateDeduction);
+
+  // Provident Fund calculation (only if pfEligible and pf percent > 0)
   let pfEmployeeDeduction = 0;
   let pfEmployerContribution = 0;
-  if (employee.pfEligible) {
-    const pf = calculateProvidentFund(
-      basic,
-      settings?.pfEmployeePercent || 8.33,
-      settings?.pfEmployerPercent || 8.33
-    );
+  const pfEmployeeRate = settings?.pfEmployeePercent ?? 0;
+  const pfEmployerRate = settings?.pfEmployerPercent ?? 0;
+  if (employee.pfEligible && pfEmployeeRate > 0) {
+    const pf = calculateProvidentFund(basic, pfEmployeeRate, pfEmployerRate);
     pfEmployeeDeduction = pf.employeePF;
     pfEmployerContribution = pf.employerPF;
   }
 
-  // Loan installment
+  // Loan deduction (only if loanDeductionEnabled is true)
+  const isLoanDeductionEnabled = settings?.loanDeductionEnabled ?? true;
+  const loanInstallment = isLoanDeductionEnabled ? (employee.loanInstallment || 0) : 0;
   const loanDeduction = roundCurrency(loanInstallment);
+
+  const grossSalary = calculateGross(basic, allowances, bonus, overtime);
 
   const totalDeductions = calculateTotalDeductions(
     deductions,

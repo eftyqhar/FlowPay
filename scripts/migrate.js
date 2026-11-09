@@ -164,6 +164,7 @@ CREATE TABLE public.company_settings (
   tax_free_threshold NUMERIC DEFAULT 350000,
   standard_working_days INTEGER DEFAULT 22,
   auto_deduct_absence_days BOOLEAN DEFAULT true,
+  rules_config JSONB DEFAULT '{}'::jsonb,
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 

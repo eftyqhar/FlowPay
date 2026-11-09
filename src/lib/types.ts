@@ -133,6 +133,20 @@ export interface PayrollRecord {
   breakdown?: SalaryBreakdown;
 }
 
+export interface LateDeductionConfig {
+  enabled: boolean;
+  graceMinutes: number; // default: 15 mins
+  lateDaysThreshold: number; // e.g. 3 late arrivals
+  deductionDays: number; // e.g. 1 day salary deduction
+}
+
+export interface FestivalBonusConfig {
+  enabled: boolean;
+  type: 'percentage' | 'fixed';
+  value: number; // e.g. 50% of basic
+  frequencyPerYear: number; // e.g. 2 times/year
+}
+
 // Company Settings
 export interface CompanySettings {
   name: string;
@@ -145,7 +159,7 @@ export interface CompanySettings {
   currencySymbol: string;
   fiscalYearStart: number; // month 1-12
   defaultAllowancePercent: number;
-  defaultTaxPercent: number;
+  defaultTaxPercent: number; // default 0%
   paymentMethods: PaymentMethod[];
   minimumWage?: number;
   overtimeMultiplier?: number;
@@ -154,6 +168,21 @@ export interface CompanySettings {
   taxFreeThreshold?: number;
   standardWorkingDays?: number;
   autoDeductAbsenceDays?: boolean;
+
+  // Recommended Salary & Compensation Policy Rules
+  payrollFrequency?: 'monthly' | 'bi-weekly' | 'weekly';
+  salaryPaymentDate?: number; // 1-31
+  dailyWorkingHours?: number; // default 8
+  weeklyHoliday?: string; // 'friday' | 'friday_saturday' | 'saturday' | 'sunday'
+  halfDayDeduction?: boolean; // default true
+  lateDeductionRules?: LateDeductionConfig;
+  paidLeaveDeduction?: number; // default 0
+  unpaidLeaveDeduction?: boolean; // default true
+  overtimeApprovalRequired?: boolean; // default true
+  festivalBonusConfig?: FestivalBonusConfig;
+  salaryAdvanceEnabled?: boolean; // default true
+  loanDeductionEnabled?: boolean; // default true
+  salaryRoundingDecimals?: number; // default 2
 }
 
 // Dashboard

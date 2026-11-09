@@ -32,6 +32,7 @@ interface AttendanceState {
     halfDay: number;
     onLeave: number;
     unpaidLeaveDays: number;
+    overtimeHours: number;
   };
 }
 
@@ -241,7 +242,10 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
       halfDay: 0,
       onLeave: 0,
       unpaidLeaveDays: 0,
+      overtimeHours: 0,
     };
+
+    const standardDailyHours = 8;
 
     employeeRecords.forEach((r) => {
       if (r.status === 'present') summary.present++;
@@ -249,6 +253,18 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
       else if (r.status === 'late') summary.late++;
       else if (r.status === 'half_day') summary.halfDay++;
       else if (r.status === 'on_leave') summary.onLeave++;
+
+      // Detect overtime based on Daily Working Hours (default 8h)
+      if (r.checkIn && r.checkOut) {
+        const [inH, inM] = r.checkIn.split(':').map(Number);
+        const [outH, outM] = r.checkOut.split(':').map(Number);
+        if (!isNaN(inH) && !isNaN(outH)) {
+          const totalDurationHours = (outH * 60 + outM - (inH * 60 + inM)) / 60;
+          if (totalDurationHours > standardDailyHours) {
+            summary.overtimeHours += Math.round((totalDurationHours - standardDailyHours) * 10) / 10;
+          }
+        }
+      }
     });
 
     // Calculate unpaid leave days for this month
