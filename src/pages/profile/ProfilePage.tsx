@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -9,17 +9,33 @@ import { Badge } from '@/components/ui/badge';
 import { useAuthStore } from '@/stores/authStore';
 import { useEmployeeStore } from '@/stores/employeeStore';
 import { getInitials, formatDate } from '@/lib/utils';
-import { User, Lock, Mail, Shield, CheckCircle, ExternalLink } from 'lucide-react';
+import { uploadAvatar } from '@/lib/imageUtils';
+import {
+  User,
+  Lock,
+  Mail,
+  Shield,
+  CheckCircle,
+  ExternalLink,
+  Camera,
+  Upload,
+  Trash2,
+  Loader2,
+  Image as ImageIcon,
+} from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
 export default function ProfilePage() {
   const navigate = useNavigate();
   const { currentUser, updateProfile, changePassword } = useAuthStore();
-  const { employees } = useEmployeeStore();
+  const { employees, updateEmployee } = useEmployeeStore();
 
   const [name, setName] = useState(currentUser?.name || '');
   const [avatar, setAvatar] = useState(currentUser?.avatar || '');
+  const [isUploading, setIsUploading] = useState(false);
+  const [showUrlInput, setShowUrlInput] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Password fields
   const [currentPassword, setCurrentPassword] = useState('');
@@ -30,17 +46,80 @@ export default function ProfilePage() {
     ? employees.find((e) => e.employeeId === currentUser.employeeId)
     : employees.find((e) => e.email.toLowerCase() === currentUser?.email.toLowerCase());
 
-  const handleUpdateProfile = (e: React.FormEvent) => {
+  const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !currentUser) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select a valid image file (PNG, JPG, WebP, GIF)');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image file size must be less than 5 MB');
+      return;
+    }
+
+    try {
+      setIsUploading(true);
+      toast.loading('Processing & uploading photo...', { id: 'upload-avatar' });
+      
+      const newAvatarUrl = await uploadAvatar(file, currentUser.id);
+      setAvatar(newAvatarUrl);
+
+      // Save immediately to user profile in Supabase
+      await updateProfile({ avatar: newAvatarUrl });
+
+      // Synchronize with linked employee profile if existing
+      if (linkedEmployee) {
+        await updateEmployee(linkedEmployee.id, { photo: newAvatarUrl });
+      }
+
+      toast.success('Profile photo updated successfully!', { id: 'upload-avatar' });
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to upload photo', { id: 'upload-avatar' });
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleRemovePhoto = async () => {
+    if (!currentUser) return;
+    const defaultAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.name)}&background=random`;
+    try {
+      setIsUploading(true);
+      setAvatar(defaultAvatar);
+      await updateProfile({ avatar: defaultAvatar });
+      if (linkedEmployee) {
+        await updateEmployee(linkedEmployee.id, { photo: defaultAvatar });
+      }
+      toast.success('Custom photo removed. Reset to default avatar.');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to remove photo');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
       toast.error('Name cannot be empty');
       return;
     }
-    updateProfile({
-      name: name.trim(),
-      avatar: avatar.trim() || undefined,
-    });
-    toast.success('Profile details updated successfully');
+    try {
+      await updateProfile({
+        name: name.trim(),
+        avatar: avatar.trim() || undefined,
+      });
+      if (linkedEmployee && avatar.trim()) {
+        await updateEmployee(linkedEmployee.id, { photo: avatar.trim() });
+      }
+      toast.success('Profile details saved successfully');
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to update profile');
+    }
   };
 
   const handleChangePassword = async (e: React.FormEvent) => {
@@ -74,29 +153,101 @@ export default function ProfilePage() {
     return <div className="p-8 text-center text-slate-500">Please sign in to view your profile.</div>;
   }
 
+  const effectiveAvatar = avatar || currentUser.avatar;
+
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       <PageHeader
         title="My User Profile"
-        description="Manage your account preferences, password security, and employee link"
+        description="Manage your account preferences, profile photo, password security, and employee link"
+      />
+
+      {/* Hidden file input for uploading profile picture */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/png, image/jpeg, image/webp, image/gif"
+        className="hidden"
+        onChange={handlePhotoSelect}
       />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Left Column: Account Summary */}
-        <Card className="md:col-span-1">
+        {/* Left Column: Account Summary & Photo Avatar */}
+        <Card className="md:col-span-1 shadow-sm">
           <CardHeader className="text-center pb-2">
             <div className="flex justify-center mb-3">
-              <Avatar className="h-24 w-24 border-2 border-indigo-100 shadow-sm">
-                <AvatarImage src={currentUser.avatar} />
-                <AvatarFallback className="text-2xl font-bold bg-indigo-100 text-indigo-700">
-                  {getInitials(currentUser.name)}
-                </AvatarFallback>
-              </Avatar>
+              <div
+                className="relative group cursor-pointer inline-block"
+                onClick={() => !isUploading && fileInputRef.current?.click()}
+                title="Click to upload profile photo"
+              >
+                <Avatar className="h-28 w-28 border-4 border-indigo-100 shadow-md ring-2 ring-indigo-50 transition-all duration-200 group-hover:scale-105 group-hover:border-indigo-300">
+                  <AvatarImage src={effectiveAvatar} className="object-cover" />
+                  <AvatarFallback className="text-3xl font-bold bg-indigo-100 text-indigo-700">
+                    {getInitials(currentUser.name)}
+                  </AvatarFallback>
+                </Avatar>
+
+                {/* Hover overlay */}
+                <div className="absolute inset-0 bg-slate-900/50 rounded-full flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white text-[11px] font-semibold backdrop-blur-[1px]">
+                  {isUploading ? (
+                    <Loader2 className="w-6 h-6 animate-spin text-white mb-1" />
+                  ) : (
+                    <>
+                      <Camera className="w-5 h-5 mb-0.5 text-white" />
+                      <span>Upload</span>
+                    </>
+                  )}
+                </div>
+
+                {/* Floating camera button indicator */}
+                <div className="absolute bottom-0 right-0 bg-indigo-600 text-white p-2 rounded-full shadow-md border-2 border-white hover:bg-indigo-700 transition-colors">
+                  <Camera className="w-4 h-4" />
+                </div>
+              </div>
             </div>
+
+            <div className="flex items-center justify-center gap-2 mb-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs font-semibold bg-white border-slate-200 hover:bg-indigo-50 hover:text-indigo-600"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isUploading}
+              >
+                {isUploading ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Uploading...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-3.5 h-3.5 mr-1.5 text-indigo-600" /> Upload Photo
+                  </>
+                )}
+              </Button>
+              {effectiveAvatar && !effectiveAvatar.includes('ui-avatars.com') && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
+                  onClick={handleRemovePhoto}
+                  disabled={isUploading}
+                  title="Remove custom photo"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </Button>
+              )}
+            </div>
+
             <CardTitle className="text-lg">{currentUser.name}</CardTitle>
             <p className="text-xs text-slate-500 truncate">{currentUser.email}</p>
             <div className="mt-2">
-              <Badge variant="outline" className="uppercase font-semibold text-xs tracking-wider bg-indigo-50 text-indigo-700 border-indigo-200">
+              <Badge
+                variant="outline"
+                className="uppercase font-semibold text-xs tracking-wider bg-indigo-50 text-indigo-700 border-indigo-200"
+              >
                 {currentUser.role}
               </Badge>
             </div>
@@ -129,7 +280,9 @@ export default function ProfilePage() {
                   Linked Employee
                 </span>
                 <p className="font-medium text-xs text-slate-800">{linkedEmployee.fullName}</p>
-                <p className="text-xs text-slate-500">{linkedEmployee.designation} • {linkedEmployee.department}</p>
+                <p className="text-xs text-slate-500">
+                  {linkedEmployee.designation} • {linkedEmployee.department}
+                </p>
                 <Button
                   variant="outline"
                   size="sm"
@@ -150,7 +303,7 @@ export default function ProfilePage() {
               <CardTitle className="text-base font-semibold flex items-center gap-2">
                 <User className="w-4 h-4 text-indigo-600" /> Personal Details
               </CardTitle>
-              <CardDescription>Update your display name and avatar photo URL</CardDescription>
+              <CardDescription>Update your display name and profile avatar</CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleUpdateProfile} className="space-y-4">
@@ -163,6 +316,7 @@ export default function ProfilePage() {
                     required
                   />
                 </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="email">Email Address</Label>
                   <Input
@@ -173,16 +327,71 @@ export default function ProfilePage() {
                   />
                   <p className="text-xs text-slate-400">Email address is managed by company IT / Admin.</p>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="avatar">Avatar Image URL</Label>
-                  <Input
-                    id="avatar"
-                    placeholder="https://..."
-                    value={avatar}
-                    onChange={(e) => setAvatar(e.target.value)}
-                  />
+
+                {/* Profile Photo Uploader Section */}
+                <div className="space-y-2 pt-2 border-t">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-semibold text-slate-700">Profile Photo</Label>
+                    <button
+                      type="button"
+                      className="text-[11px] text-indigo-600 hover:text-indigo-800 font-medium"
+                      onClick={() => setShowUrlInput(!showUrlInput)}
+                    >
+                      {showUrlInput ? 'Hide URL input' : 'Or paste image URL'}
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-3 p-3 rounded-lg border border-slate-200 bg-slate-50/50">
+                    <Avatar className="h-12 w-12 border border-slate-200 shadow-sm shrink-0">
+                      <AvatarImage src={effectiveAvatar} className="object-cover" />
+                      <AvatarFallback className="font-bold bg-indigo-100 text-indigo-700 text-sm">
+                        {getInitials(currentUser.name)}
+                      </AvatarFallback>
+                    </Avatar>
+
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-slate-800 truncate">
+                        Upload custom avatar photo
+                      </p>
+                      <p className="text-[11px] text-slate-500">
+                        Supports PNG, JPG, WebP, GIF (Max 5MB). Automatically cropped and optimized.
+                      </p>
+                    </div>
+
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 text-xs shrink-0 bg-white"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isUploading}
+                    >
+                      {isUploading ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" />
+                      ) : (
+                        <Upload className="w-3.5 h-3.5 mr-1 text-indigo-600" />
+                      )}
+                      Choose File
+                    </Button>
+                  </div>
+
+                  {showUrlInput && (
+                    <div className="space-y-1.5 pt-2">
+                      <Label htmlFor="avatar-url" className="text-xs text-slate-500">
+                        Avatar Image Direct URL
+                      </Label>
+                      <Input
+                        id="avatar-url"
+                        placeholder="https://example.com/avatar.jpg"
+                        value={avatar}
+                        onChange={(e) => setAvatar(e.target.value)}
+                        className="text-xs font-mono"
+                      />
+                    </div>
+                  )}
                 </div>
-                <div className="flex justify-end pt-2">
+
+                <div className="flex justify-end pt-3">
                   <Button type="submit" className="bg-indigo-600 hover:bg-indigo-700">
                     Save Profile Changes
                   </Button>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useEmployeeStore } from '@/stores/employeeStore';
 import { usePayrollStore } from '@/stores/payrollStore';
@@ -36,10 +36,14 @@ import {
   Smartphone,
   Building,
   CreditCard,
+  Camera,
+  Upload,
+  Loader2,
 } from 'lucide-react';
 import { getInitials, formatDate, getMonthName, formatCurrency } from '@/lib/utils';
 import { calculateFullSalary } from '@/lib/salary';
 import { PayslipPreviewDialog } from '@/components/payslip/PayslipPreviewDialog';
+import { uploadAvatar } from '@/lib/imageUtils';
 import { toast } from 'sonner';
 
 export default function EmployeeProfilePage() {
@@ -48,13 +52,15 @@ export default function EmployeeProfilePage() {
 
   const { employees, updateEmployee, addDocument, deleteDocument } = useEmployeeStore();
   const { getPayrollByEmployee } = usePayrollStore();
-  const { currentUser } = useAuthStore();
+  const { currentUser, users, updateUser } = useAuthStore();
 
   const [selectedPayroll, setSelectedPayroll] = useState<any>(null);
   const [showPayslip, setShowPayslip] = useState(false);
   const [docModalOpen, setDocModalOpen] = useState(false);
   const [docName, setDocName] = useState('');
   const [docType, setDocType] = useState('Contract');
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement | null>(null);
 
   const employee = employees.find((e) => e.id === id || e.employeeId === id);
 
@@ -115,6 +121,52 @@ export default function EmployeeProfilePage() {
     : [];
   const payslips = history.filter((h) => h.status === 'paid');
 
+  const isOwnProfile =
+    Boolean(currentUser) &&
+    (currentUser?.employeeId === employee.employeeId ||
+      currentUser?.email?.toLowerCase() === employee.email?.toLowerCase());
+
+  const canChangePhoto = canManageEmployees || isOwnProfile;
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !employee) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select an image file (PNG, JPG, WebP, GIF)');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image file size must be less than 5 MB');
+      return;
+    }
+
+    try {
+      setIsUploadingPhoto(true);
+      toast.loading('Uploading photo...', { id: 'upload-emp-photo' });
+      const newPhotoUrl = await uploadAvatar(file, employee.id);
+      await updateEmployee(employee.id, { photo: newPhotoUrl });
+
+      // If there is a matching user account in authStore, update their avatar too
+      const matchingUser = users.find(
+        (u) =>
+          u.employeeId === employee.employeeId ||
+          u.email.toLowerCase() === employee.email.toLowerCase()
+      );
+      if (matchingUser) {
+        await updateUser(matchingUser.id, { avatar: newPhotoUrl });
+      }
+
+      toast.success('Photo updated successfully!', { id: 'upload-emp-photo' });
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to upload photo', { id: 'upload-emp-photo' });
+    } finally {
+      setIsUploadingPhoto(false);
+      if (photoInputRef.current) photoInputRef.current.value = '';
+    }
+  };
+
   const handleToggleStatus = () => {
     const newStatus = employee.status === 'active' ? 'inactive' : 'active';
     updateEmployee(employee.id, { status: newStatus });
@@ -141,6 +193,15 @@ export default function EmployeeProfilePage() {
 
   return (
     <div className="space-y-6">
+      {/* Hidden file input for employee photo upload */}
+      <input
+        ref={photoInputRef}
+        type="file"
+        accept="image/png, image/jpeg, image/webp, image/gif"
+        className="hidden"
+        onChange={handlePhotoUpload}
+      />
+
       {!isEmployeeRole && (
         <Button variant="ghost" onClick={() => navigate('/employees')} className="-ml-4 text-slate-500">
           <ArrowLeft className="w-4 h-4 mr-2" /> Back to Employees
@@ -153,12 +214,35 @@ export default function EmployeeProfilePage() {
         <div className="px-6 pb-6 relative">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end -mt-12 mb-4 gap-4">
             <div className="flex items-end gap-4">
-              <Avatar className="h-24 w-24 border-4 border-white shadow-md bg-white">
-                <AvatarImage src={employee.photo} />
-                <AvatarFallback className="text-2xl font-bold bg-indigo-100 text-indigo-700">
-                  {getInitials(employee.fullName)}
-                </AvatarFallback>
-              </Avatar>
+              <div
+                className={`relative group ${canChangePhoto ? 'cursor-pointer' : ''}`}
+                onClick={() => canChangePhoto && !isUploadingPhoto && photoInputRef.current?.click()}
+                title={canChangePhoto ? 'Click to upload photo' : undefined}
+              >
+                <Avatar className="h-24 w-24 border-4 border-white shadow-md bg-white ring-2 ring-indigo-50 transition-all duration-200 group-hover:scale-105">
+                  <AvatarImage src={employee.photo} className="object-cover" />
+                  <AvatarFallback className="text-2xl font-bold bg-indigo-100 text-indigo-700">
+                    {getInitials(employee.fullName)}
+                  </AvatarFallback>
+                </Avatar>
+                {canChangePhoto && (
+                  <div className="absolute inset-0 bg-slate-900/40 rounded-full flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white text-[10px] font-semibold backdrop-blur-[1px]">
+                    {isUploadingPhoto ? (
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <>
+                        <Camera className="w-4 h-4 mb-0.5" />
+                        <span>Upload</span>
+                      </>
+                    )}
+                  </div>
+                )}
+                {canChangePhoto && (
+                  <div className="absolute bottom-0 right-0 bg-indigo-600 text-white p-1.5 rounded-full shadow border-2 border-white">
+                    <Camera className="w-3 h-3" />
+                  </div>
+                )}
+              </div>
               <div className="pb-1">
                 <h1 className="text-2xl font-bold text-slate-900">{employee.fullName}</h1>
                 <div className="flex items-center gap-2 mt-1 flex-wrap">
