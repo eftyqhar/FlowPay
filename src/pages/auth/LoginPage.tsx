@@ -5,19 +5,11 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { toast } from 'sonner';
 import { useAuthStore } from '@/stores/authStore';
-import { UserRole } from '@/lib/types';
 import { Loader2, ShieldCheck, UserPlus, LogIn } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 
 const loginSchema = z.object({
   email: z.string().email({ message: 'Please enter a valid email address' }),
@@ -28,7 +20,6 @@ const signupSchema = z.object({
   name: z.string().min(2, { message: 'Please enter your full name' }),
   email: z.string().email({ message: 'Please enter a valid email address' }),
   password: z.string().min(6, { message: 'Password must be at least 6 characters' }),
-  role: z.enum(['owner', 'admin', 'accountant', 'hr', 'employee']),
 });
 
 type LoginFormValues = z.infer<typeof loginSchema>;
@@ -57,7 +48,6 @@ export function LoginPage() {
       name: '',
       email: '',
       password: '',
-      role: 'admin',
     },
   });
 
@@ -81,7 +71,7 @@ export function LoginPage() {
   const onSignupSubmit = async (data: SignupFormValues) => {
     setIsSubmitting(true);
     try {
-      const res = await signup(data.email, data.password, data.name, data.role as UserRole);
+      const res = await signup(data.email, data.password, data.name);
       if (res.success) {
         toast.success(`Account created successfully! Welcome to FlowPay.`);
         navigate(from, { replace: true });
@@ -236,23 +226,11 @@ export function LoginPage() {
                   )}
                 </div>
 
-                <div className="space-y-1.5">
-                  <Label htmlFor="signup-role">System Role</Label>
-                  <Select
-                    defaultValue="admin"
-                    onValueChange={(val) => signupForm.setValue('role', val as any)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select Role" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="owner">Owner (Full System Access)</SelectItem>
-                      <SelectItem value="admin">Admin (HR & Payroll Manager)</SelectItem>
-                      <SelectItem value="accountant">Accountant (Disbursements & Tax)</SelectItem>
-                      <SelectItem value="hr">HR (Employee Directory & Attendance)</SelectItem>
-                      <SelectItem value="employee">Employee (Self-Service Portal)</SelectItem>
-                    </SelectContent>
-                  </Select>
+                <div className="rounded-lg border border-indigo-100 bg-indigo-50/70 p-3 text-xs text-indigo-900 flex items-start gap-2.5">
+                  <ShieldCheck className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+                  <div className="leading-relaxed">
+                    <span className="font-semibold text-indigo-950">Default Role: Employee.</span> All new accounts are registered as <strong>Employee</strong> by default. Higher administrative privileges (Super Admin, HR, Accountant) can only be granted by the organization <strong>Super Admin</strong> from Settings.
+                  </div>
                 </div>
 
                 <Button

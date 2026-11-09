@@ -201,7 +201,7 @@ CREATE TABLE public.users (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   email TEXT NOT NULL UNIQUE,
-  role TEXT NOT NULL DEFAULT 'admin',
+  role TEXT NOT NULL DEFAULT 'employee',
   avatar TEXT,
   is_active BOOLEAN DEFAULT true,
   employee_id TEXT,

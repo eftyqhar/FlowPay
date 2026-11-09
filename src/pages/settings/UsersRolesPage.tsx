@@ -30,7 +30,7 @@ import { User, UserRole } from '@/lib/types';
 import { toast } from 'sonner';
 
 export default function UsersRolesPage() {
-  const { users, currentUser, addUser, toggleUserStatus, deleteUser } = useAuthStore();
+  const { users, currentUser, addUser, updateUser, toggleUserStatus, deleteUser } = useAuthStore();
   const { employees } = useEmployeeStore();
   const { addLog } = useAuditStore();
 
@@ -40,6 +40,33 @@ export default function UsersRolesPage() {
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<UserRole>('employee');
   const [linkedEmployeeId, setLinkedEmployeeId] = useState('');
+
+  const isSuperAdmin = currentUser?.role === 'owner';
+
+  const handleRoleChange = async (userId: string, userName: string, newRole: UserRole) => {
+    if (!isSuperAdmin) {
+      toast.error('Permission denied: Only the Super Admin (Owner) can modify user roles.');
+      return;
+    }
+    if (userId === currentUser?.id) {
+      toast.error('You cannot change your own Super Admin role.');
+      return;
+    }
+
+    try {
+      await updateUser(userId, { role: newRole });
+      addLog({
+        userId: currentUser?.id || 'USR-001',
+        userName: currentUser?.name || 'Owner',
+        action: 'Update User Role',
+        module: 'Security & Access',
+        details: `Super Admin changed role for ${userName} to ${newRole.toUpperCase()}`,
+      });
+      toast.success(`Role for ${userName} updated to ${newRole.toUpperCase()}`);
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to update user role');
+    }
+  };
 
   const handleToggleStatus = (id: string, userName: string) => {
     if (id === currentUser?.id) {
@@ -142,24 +169,50 @@ export default function UsersRolesPage() {
     {
       header: 'Assigned Role',
       key: 'role',
-      cell: (item: User) => (
-        <Badge
-          variant="outline"
-          className={
-            item.role === 'owner'
-              ? 'bg-purple-50 text-purple-700 border-purple-200'
-              : item.role === 'admin'
-              ? 'bg-blue-50 text-blue-700 border-blue-200'
-              : item.role === 'accountant'
-              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-              : item.role === 'hr'
-              ? 'bg-amber-50 text-amber-700 border-amber-200'
-              : 'bg-slate-50 text-slate-700 border-slate-200'
-          }
-        >
-          {item.role.toUpperCase()}
-        </Badge>
-      ),
+      cell: (item: User) => {
+        const isSelf = item.id === currentUser?.id;
+
+        // If current user is Super Admin (Owner) and not editing self, allow quick role change
+        if (isSuperAdmin && !isSelf) {
+          return (
+            <Select
+              value={item.role}
+              onValueChange={(val) => handleRoleChange(item.id, item.name, val as UserRole)}
+            >
+              <SelectTrigger className="h-8 w-36 text-xs font-semibold bg-white border-slate-300 shadow-sm focus:ring-indigo-500">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="owner">Owner (Super Admin)</SelectItem>
+                <SelectItem value="admin">Admin</SelectItem>
+                <SelectItem value="accountant">Accountant</SelectItem>
+                <SelectItem value="hr">HR</SelectItem>
+                <SelectItem value="employee">Employee</SelectItem>
+              </SelectContent>
+            </Select>
+          );
+        }
+
+        return (
+          <Badge
+            variant="outline"
+            className={
+              item.role === 'owner'
+                ? 'bg-purple-50 text-purple-700 border-purple-200 font-semibold'
+                : item.role === 'admin'
+                ? 'bg-blue-50 text-blue-700 border-blue-200 font-semibold'
+                : item.role === 'accountant'
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200 font-semibold'
+                : item.role === 'hr'
+                ? 'bg-amber-50 text-amber-700 border-amber-200 font-semibold'
+                : 'bg-slate-50 text-slate-700 border-slate-200 font-semibold'
+            }
+          >
+            {item.role === 'owner' && <ShieldCheck className="w-3 h-3 mr-1 inline text-purple-600" />}
+            {item.role.toUpperCase()}
+          </Badge>
+        );
+      },
     },
     {
       header: 'Status',
@@ -270,7 +323,11 @@ export default function UsersRolesPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="role">System Role *</Label>
-                <Select value={role} onValueChange={(v) => setRole(v as UserRole)}>
+                <Select
+                  value={role}
+                  onValueChange={(v) => setRole(v as UserRole)}
+                  disabled={!isSuperAdmin}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Select Role" />
                   </SelectTrigger>
@@ -282,6 +339,11 @@ export default function UsersRolesPage() {
                     <SelectItem value="employee">Employee (Self-Service Profile & Payslips)</SelectItem>
                   </SelectContent>
                 </Select>
+                {!isSuperAdmin && (
+                  <p className="text-[11px] text-amber-600">
+                    * Only Super Admin (Owner) can assign administrative roles. Standard users are created with Employee role.
+                  </p>
+                )}
               </div>
 
               {role === 'employee' && (
@@ -316,6 +378,15 @@ export default function UsersRolesPage() {
             </form>
           </DialogContent>
         </Dialog>
+      </div>
+
+      <div className="rounded-lg border border-indigo-100 bg-indigo-50/70 p-4 flex items-start gap-3">
+        <ShieldCheck className="w-5 h-5 text-indigo-600 shrink-0 mt-0.5" />
+        <div className="text-xs text-indigo-950 leading-relaxed">
+          <p className="font-semibold text-sm text-indigo-900 mb-0.5">Role Management & Security Policy</p>
+          During self-registration, all users are automatically assigned the <strong>Employee</strong> role by default. 
+          Only the <strong>Super Admin (Owner)</strong> can modify or elevate any user's role to Admin, HR, Accountant, or Super Admin using the role selector directly in the table below.
+        </div>
       </div>
 
       <Card>

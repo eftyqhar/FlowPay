@@ -14,7 +14,7 @@ interface AuthState {
     email: string,
     password: string,
     name: string,
-    role: UserRole
+    role?: UserRole
   ) => Promise<{ success: boolean; message?: string }>;
   logout: () => Promise<void>;
   fetchUsers: () => Promise<void>;
@@ -60,7 +60,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             id: session.user.id,
             name: session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'User',
             email: session.user.email || '',
-            role: (session.user.user_metadata?.role as UserRole) || 'admin',
+            role: (session.user.user_metadata?.role as UserRole) || 'employee',
             isActive: true,
             createdAt: session.user.created_at || new Date().toISOString(),
           };
@@ -126,7 +126,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             id: data.user.id,
             name: data.user.user_metadata?.name || data.user.email?.split('@')[0] || 'User',
             email: data.user.email || '',
-            role: (data.user.user_metadata?.role as UserRole) || 'admin',
+            role: (data.user.user_metadata?.role as UserRole) || 'employee',
             isActive: true,
             createdAt: data.user.created_at || new Date().toISOString(),
           };
@@ -145,15 +145,31 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  signup: async (email: string, password: string, name: string, role: UserRole) => {
+  signup: async (email: string, password: string, name: string, _role?: UserRole) => {
     try {
       set({ isLoading: true });
       const cleanEmail = email.trim().toLowerCase();
+
+      // Enforce role security:
+      // If no users exist yet in public.users, bootstrap the first user as 'owner' (Super Admin).
+      // All subsequent user signups are strictly given the 'employee' role.
+      // Roles can only be changed by the Super Admin in Settings > Users.
+      let assignedRole: UserRole = 'employee';
+      const { count, error: countError } = await supabase
+        .from('users')
+        .select('*', { count: 'exact', head: true });
+
+      if (!countError && (count === 0 || count === null)) {
+        assignedRole = 'owner';
+      } else {
+        assignedRole = 'employee';
+      }
+
       const { data, error } = await supabase.auth.signUp({
         email: cleanEmail,
         password,
         options: {
-          data: { name, role },
+          data: { name, role: assignedRole },
         },
       });
 
@@ -167,7 +183,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           id: data.user.id,
           name,
           email: data.user.email || cleanEmail,
-          role,
+          role: assignedRole,
           isActive: true,
           createdAt: new Date().toISOString(),
         };
@@ -255,6 +271,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       }));
     } catch (err) {
       console.error('Failed to update user:', err);
+      throw err;
     }
   },
 
