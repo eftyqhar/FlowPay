@@ -228,6 +228,22 @@ GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
+
+-- Auto-confirm any new user signups (Bypass email verification)
+CREATE OR REPLACE FUNCTION public.auto_confirm_new_user()
+RETURNS trigger AS $$
+BEGIN
+  NEW.email_confirmed_at = now();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS on_auth_user_created_auto_confirm ON auth.users;
+CREATE TRIGGER on_auth_user_created_auto_confirm
+  BEFORE INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.auto_confirm_new_user();
+
+UPDATE auth.users SET email_confirmed_at = now() WHERE email_confirmed_at IS NULL;
 `;
 
 async function runMigration() {

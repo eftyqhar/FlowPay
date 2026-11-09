@@ -148,8 +148,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   signup: async (email: string, password: string, name: string, role: UserRole) => {
     try {
       set({ isLoading: true });
+      const cleanEmail = email.trim().toLowerCase();
       const { data, error } = await supabase.auth.signUp({
-        email: email.trim(),
+        email: cleanEmail,
         password,
         options: {
           data: { name, role },
@@ -165,20 +166,29 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         const newUser: User = {
           id: data.user.id,
           name,
-          email: data.user.email || email.trim(),
+          email: data.user.email || cleanEmail,
           role,
           isActive: true,
           createdAt: new Date().toISOString(),
         };
 
         await supabase.from('users').upsert(userToRow(newUser));
+
+        // If no session returned, automatically sign in (auto-confirmed)
+        if (!data.session) {
+          await supabase.auth.signInWithPassword({
+            email: cleanEmail,
+            password,
+          });
+        }
+
         set({ currentUser: newUser, isAuthenticated: true, isLoading: false });
         get().fetchUsers();
         return { success: true };
       }
 
       set({ isLoading: false });
-      return { success: true, message: 'Please check your email to verify your account.' };
+      return { success: false, message: 'Signup failed. Please try again.' };
     } catch (err: any) {
       set({ isLoading: false });
       return { success: false, message: err.message || 'Signup failed.' };
