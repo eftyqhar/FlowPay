@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useEmployeeStore } from '@/stores/employeeStore';
 import { usePayrollStore } from '@/stores/payrollStore';
@@ -50,7 +50,8 @@ export default function EmployeeProfilePage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  const { employees, updateEmployee, addDocument, deleteDocument } = useEmployeeStore();
+  const { employees, updateEmployee, addDocument, deleteDocument, fetchEmployees, isLoading } =
+    useEmployeeStore();
   const { getPayrollByEmployee } = usePayrollStore();
   const { currentUser, users, updateUser } = useAuthStore();
 
@@ -62,7 +63,36 @@ export default function EmployeeProfilePage() {
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const photoInputRef = useRef<HTMLInputElement | null>(null);
 
+  useEffect(() => {
+    fetchEmployees();
+  }, [fetchEmployees]);
+
   const employee = employees.find((e) => e.id === id || e.employeeId === id);
+
+  const matchingUser = users.find(
+    (u) =>
+      (employee?.employeeId && u.employeeId === employee.employeeId) ||
+      (employee?.email && u.email.toLowerCase() === employee.email.toLowerCase())
+  );
+
+  const effectivePhoto =
+    employee?.photo && !employee.photo.includes('ui-avatars.com')
+      ? employee.photo
+      : matchingUser?.avatar && !matchingUser.avatar.includes('ui-avatars.com')
+      ? matchingUser.avatar
+      : employee?.photo || matchingUser?.avatar;
+
+  // Auto-sync: If user uploaded a custom photo, sync it to the employee record
+  useEffect(() => {
+    if (
+      employee &&
+      matchingUser?.avatar &&
+      !matchingUser.avatar.includes('ui-avatars.com') &&
+      (!employee.photo || employee.photo.includes('ui-avatars.com'))
+    ) {
+      updateEmployee(employee.id, { photo: matchingUser.avatar });
+    }
+  }, [employee?.id, employee?.photo, matchingUser?.avatar, updateEmployee]);
 
   // Authorization check for employees:
   const userRole = (currentUser?.role || '').toLowerCase();
@@ -98,6 +128,14 @@ export default function EmployeeProfilePage() {
         </div>
       );
     }
+  }
+
+  if (isLoading && !employee) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+      </div>
+    );
   }
 
   if (!employee) {
@@ -219,9 +257,18 @@ export default function EmployeeProfilePage() {
                 onClick={() => canChangePhoto && !isUploadingPhoto && photoInputRef.current?.click()}
                 title={canChangePhoto ? 'Click to upload photo' : undefined}
               >
-                <Avatar className="h-24 w-24 border-4 border-white shadow-md bg-white ring-2 ring-indigo-50 transition-all duration-200 group-hover:scale-105">
-                  <AvatarImage src={employee.photo} className="object-cover" />
-                  <AvatarFallback className="text-2xl font-bold bg-indigo-100 text-indigo-700">
+                <Avatar className="h-24 w-24 border-4 border-white shadow-md bg-white ring-2 ring-indigo-50 transition-all duration-200 group-hover:scale-105 overflow-hidden">
+                  {effectivePhoto ? (
+                    <img
+                      src={effectivePhoto}
+                      alt={employee.fullName}
+                      className="h-full w-full object-cover"
+                      onError={(e) => {
+                        (e.target as HTMLElement).style.display = 'none';
+                      }}
+                    />
+                  ) : null}
+                  <AvatarFallback className="text-2xl font-bold bg-indigo-100 text-indigo-700 h-full w-full flex items-center justify-center">
                     {getInitials(employee.fullName)}
                   </AvatarFallback>
                 </Avatar>

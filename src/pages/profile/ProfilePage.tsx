@@ -181,9 +181,18 @@ export default function ProfilePage() {
                 onClick={() => !isUploading && fileInputRef.current?.click()}
                 title="Click to upload profile photo"
               >
-                <Avatar className="h-28 w-28 border-4 border-indigo-100 shadow-md ring-2 ring-indigo-50 transition-all duration-200 group-hover:scale-105 group-hover:border-indigo-300">
-                  <AvatarImage src={effectiveAvatar} className="object-cover" />
-                  <AvatarFallback className="text-3xl font-bold bg-indigo-100 text-indigo-700">
+                <Avatar className="h-28 w-28 border-4 border-indigo-100 shadow-md ring-2 ring-indigo-50 transition-all duration-200 group-hover:scale-105 group-hover:border-indigo-300 overflow-hidden">
+                  {effectiveAvatar ? (
+                    <img
+                      src={effectiveAvatar}
+                      alt={currentUser.name}
+                      className="h-full w-full object-cover"
+                      onError={(e) => {
+                        (e.target as HTMLElement).style.display = 'none';
+                      }}
+                    />
+                  ) : null}
+                  <AvatarFallback className="text-3xl font-bold bg-indigo-100 text-indigo-700 h-full w-full flex items-center justify-center">
                     {getInitials(currentUser.name)}
                   </AvatarFallback>
                 </Avatar>
@@ -342,9 +351,18 @@ export default function ProfilePage() {
                   </div>
 
                   <div className="flex items-center gap-3 p-3 rounded-lg border border-slate-200 bg-slate-50/50">
-                    <Avatar className="h-12 w-12 border border-slate-200 shadow-sm shrink-0">
-                      <AvatarImage src={effectiveAvatar} className="object-cover" />
-                      <AvatarFallback className="font-bold bg-indigo-100 text-indigo-700 text-sm">
+                    <Avatar className="h-12 w-12 border border-slate-200 shadow-sm shrink-0 overflow-hidden">
+                      {effectiveAvatar ? (
+                        <img
+                          src={effectiveAvatar}
+                          alt={currentUser.name}
+                          className="h-full w-full object-cover"
+                          onError={(e) => {
+                            (e.target as HTMLElement).style.display = 'none';
+                          }}
+                        />
+                      ) : null}
+                      <AvatarFallback className="font-bold bg-indigo-100 text-indigo-700 text-sm h-full w-full flex items-center justify-center">
                         {getInitials(currentUser.name)}
                       </AvatarFallback>
                     </Avatar>

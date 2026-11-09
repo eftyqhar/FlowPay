@@ -60,9 +60,20 @@ export default function AllEmployeesPage() {
       header: 'Employee',
       cell: (emp: Employee) => (
         <div className="flex items-center gap-3">
-          <Avatar className="h-9 w-9">
-            <AvatarImage src={emp.photo} alt={emp.fullName} />
-            <AvatarFallback>{getInitials(emp.fullName)}</AvatarFallback>
+          <Avatar className="h-9 w-9 overflow-hidden">
+            {emp.photo ? (
+              <img
+                src={emp.photo}
+                alt={emp.fullName}
+                className="h-full w-full object-cover"
+                onError={(e) => {
+                  (e.target as HTMLElement).style.display = 'none';
+                }}
+              />
+            ) : null}
+            <AvatarFallback className="h-full w-full flex items-center justify-center font-semibold text-xs">
+              {getInitials(emp.fullName)}
+            </AvatarFallback>
           </Avatar>
           <div className="flex flex-col">
             <span className="font-medium text-slate-900">{emp.fullName}</span>
