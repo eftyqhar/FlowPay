@@ -1,10 +1,6 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
 import { PayrollRecord, Employee, PaymentMethod } from '@/lib/types';
 import {
-  calculateGross,
-  calculateTotalDeductions,
-  calculateNet,
   calculateFullSalary,
   roundCurrency,
 } from '@/lib/salary';
@@ -12,6 +8,8 @@ import { generateId, getMonthName } from '@/lib/utils';
 import { useSettingsStore } from './settingsStore';
 import { useLoanStore } from './loanStore';
 import { useNotificationStore } from './notificationStore';
+import { supabase } from '@/lib/supabase';
+import { rowToPayroll, payrollToRow } from '@/lib/dbMappers';
 
 export interface SalaryTrend {
   month: string;
@@ -36,6 +34,8 @@ export interface EmployeePayrollInput extends Pick<Employee, 'basicSalary' | 'al
 
 interface PayrollState {
   payrollRecords: PayrollRecord[];
+  isLoading: boolean;
+  fetchPayroll: () => Promise<void>;
   generatePayroll: (
     month: number,
     year: number,
@@ -61,278 +61,355 @@ interface PayrollState {
   getDepartmentSalary: (month: number, year: number) => DepartmentSalary[];
 }
 
-export const usePayrollStore = create<PayrollState>()(
-  persist(
-    (set, get) => ({
-      payrollRecords: [],
-      generatePayroll: (month, year, employees, createdBy, replaceExisting = true) => {
-        const now = new Date().toISOString();
-        const settings = useSettingsStore.getState().settings;
+export const usePayrollStore = create<PayrollState>((set, get) => ({
+  payrollRecords: [],
+  isLoading: false,
 
-        // Prevent generating duplicate drafts for employees who already have an approved or paid record for this month/year
-        const existingRecordsForMonth = get().payrollRecords.filter(
-          (r) => r.month === month && r.year === year && (r.status === 'approved' || r.status === 'paid')
+  fetchPayroll: async () => {
+    try {
+      set({ isLoading: true });
+      const { data, error } = await supabase
+        .from('payroll_records')
+        .select('*')
+        .order('year', { ascending: false })
+        .order('month', { ascending: false });
+
+      if (error) throw error;
+      set({ payrollRecords: (data || []).map(rowToPayroll), isLoading: false });
+    } catch (err) {
+      console.error('Error fetching payroll from Supabase:', err);
+      set({ isLoading: false });
+    }
+  },
+
+  generatePayroll: (month, year, employees, createdBy, replaceExisting = true) => {
+    const now = new Date().toISOString();
+    const settings = useSettingsStore.getState().settings;
+
+    const existingRecordsForMonth = get().payrollRecords.filter(
+      (r) => r.month === month && r.year === year && (r.status === 'approved' || r.status === 'paid')
+    );
+    const finalizedEmployeeIds = new Set(existingRecordsForMonth.map((r) => r.employeeId));
+
+    const eligibleEmployees = employees.filter((emp) => !finalizedEmployeeIds.has(emp.id));
+
+    const records: PayrollRecord[] = eligibleEmployees.map((emp) => {
+      const calc = calculateFullSalary(
+        {
+          basicSalary: emp.basicSalary,
+          allowances: emp.allowances,
+          bonus: emp.bonus,
+          overtime: emp.overtime,
+          deductions: emp.deductions,
+          tax: emp.tax,
+          unpaidLeaveDays: emp.unpaidLeaveDays,
+          absentDays: emp.absentDays,
+          loanInstallment: emp.loanInstallment,
+          pfEligible: emp.pfEligible,
+        },
+        settings
+      );
+
+      return {
+        id: generateId(),
+        employeeId: emp.id,
+        employeeName: emp.fullName,
+        department: emp.department,
+        designation: emp.designation,
+        month,
+        year,
+        basicSalary: emp.basicSalary,
+        allowances: emp.allowances,
+        bonus: emp.bonus,
+        overtime: emp.overtime,
+        grossSalary: calc.grossSalary,
+        deductions: emp.deductions,
+        tax: emp.tax,
+        unpaidLeaveDays: emp.unpaidLeaveDays,
+        leaveDeduction: calc.leaveDeduction,
+        absentDays: emp.absentDays,
+        absenceDeduction: calc.absenceDeduction,
+        loanDeduction: calc.loanDeduction,
+        pfEmployeeDeduction: calc.pfEmployeeDeduction,
+        pfEmployerContribution: calc.pfEmployerContribution,
+        totalDeductions: calc.totalDeductions,
+        netSalary: calc.netSalary,
+        status: 'draft',
+        createdBy,
+        createdAt: now,
+      };
+    });
+
+    const targetEmpIds = new Set(records.map((r) => r.employeeId));
+
+    set((state) => {
+      let existingRecords = state.payrollRecords;
+      if (replaceExisting) {
+        existingRecords = existingRecords.filter(
+          (r) =>
+            !(
+              r.month === month &&
+              r.year === year &&
+              r.status === 'draft' &&
+              targetEmpIds.has(r.employeeId)
+            )
         );
-        const finalizedEmployeeIds = new Set(existingRecordsForMonth.map((r) => r.employeeId));
-        const eligibleEmployees = employees.filter((e) => !finalizedEmployeeIds.has(e.id));
+      }
+      return {
+        payrollRecords: [...existingRecords, ...records],
+      };
+    });
 
-        const records: PayrollRecord[] = eligibleEmployees.map((emp) => {
-          const absentDays = emp.absentDays !== undefined ? emp.absentDays : (emp.unpaidLeaveDays || 0);
+    // Sync generated drafts with Supabase
+    if (records.length > 0) {
+      supabase
+        .from('payroll_records')
+        .insert(records.map(payrollToRow))
+        .then(({ error }) => {
+          if (error) console.error('Failed to sync generated payroll to Supabase:', error);
+        });
+    }
+
+    return records;
+  },
+
+  approvePayroll: (ids, approvedBy) => {
+    const now = new Date().toISOString();
+    const recordsToApprove = get().payrollRecords.filter(
+      (r) => ids.includes(r.id) && r.status === 'draft'
+    );
+
+    set((state) => ({
+      payrollRecords: state.payrollRecords.map((record) =>
+        ids.includes(record.id) && record.status === 'draft'
+          ? { ...record, status: 'approved', approvedBy, approvedAt: now }
+          : record
+      ),
+    }));
+
+    // Sync to Supabase
+    ids.forEach((id) => {
+      supabase
+        .from('payroll_records')
+        .update({
+          status: 'approved',
+          approved_by: approvedBy,
+          approved_at: now,
+        })
+        .eq('id', id)
+        .then(({ error }) => {
+          if (error) console.error('Failed to update payroll approval in Supabase:', error);
+        });
+    });
+
+    // Notify each employee
+    recordsToApprove.forEach((rec) => {
+      useNotificationStore.getState().addNotification({
+        title: `Salary Approved — ${getMonthName(rec.month)} ${rec.year}`,
+        message: `Your salary payslip of ৳${rec.netSalary.toLocaleString()} has been approved and queued for payment.`,
+        type: 'info',
+        link: `/payslips/${rec.id}`,
+        targetEmployeeId: rec.employeeId,
+      });
+    });
+  },
+
+  markAsPaid: (ids, paidBy, paymentMethod, transactionRef) => {
+    const now = new Date().toISOString();
+    const txRef =
+      transactionRef || `TXN-${Date.now().toString(36).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+    const approvedRecords = get().payrollRecords.filter(
+      (record) => ids.includes(record.id) && record.status === 'approved'
+    );
+
+    approvedRecords.forEach((record) => {
+      if (record.loanDeduction && record.loanDeduction > 0) {
+        useLoanStore.getState().recordInstallmentDeduction(
+          record.employeeId,
+          record.month,
+          record.year,
+          record.id,
+          record.loanDeduction
+        );
+      }
+
+      useNotificationStore.getState().addNotification({
+        title: `Salary Disbursed — ${getMonthName(record.month)} ${record.year}`,
+        message: `Your net salary of ৳${record.netSalary.toLocaleString()} has been disbursed via ${paymentMethod.toUpperCase()}. Ref: ${txRef}.`,
+        type: 'success',
+        link: `/payslips/${record.id}`,
+        targetEmployeeId: record.employeeId,
+      });
+    });
+
+    set((state) => ({
+      payrollRecords: state.payrollRecords.map((record) =>
+        ids.includes(record.id) && record.status === 'approved'
+          ? {
+              ...record,
+              status: 'paid',
+              paidBy,
+              paidAt: now,
+              paymentDate: now.split('T')[0],
+              paymentMethod,
+              transactionRef: txRef,
+            }
+          : record
+      ),
+    }));
+
+    // Sync to Supabase
+    ids.forEach((id) => {
+      supabase
+        .from('payroll_records')
+        .update({
+          status: 'paid',
+          paid_by: paidBy,
+          paid_at: now,
+          payment_date: now.split('T')[0],
+          payment_method: paymentMethod,
+          transaction_ref: txRef,
+        })
+        .eq('id', id)
+        .then(({ error }) => {
+          if (error) console.error('Failed to update payroll payment in Supabase:', error);
+        });
+    });
+  },
+
+  updatePayrollRecord: (id, updates) => {
+    const settings = useSettingsStore.getState().settings;
+    set((state) => ({
+      payrollRecords: state.payrollRecords.map((record) => {
+        if (record.id === id && record.status === 'draft') {
+          const updated = { ...record, ...updates };
           const calc = calculateFullSalary(
             {
-              basicSalary: emp.basicSalary,
-              allowances: emp.allowances,
-              bonus: emp.bonus,
-              overtime: emp.overtime,
-              deductions: emp.deductions,
-              tax: emp.tax,
-              unpaidLeaveDays: absentDays,
-              absentDays: absentDays,
-              loanInstallment: emp.loanInstallment || 0,
-              pfEligible: emp.pfEligible ?? true,
+              basicSalary: updated.basicSalary,
+              allowances: updated.allowances,
+              bonus: updated.bonus,
+              overtime: updated.overtime,
+              deductions: updated.deductions,
+              tax: updated.tax,
+              unpaidLeaveDays: updated.unpaidLeaveDays,
+              loanInstallment: updated.loanDeduction,
+              pfEligible: updated.pfEmployeeDeduction ? updated.pfEmployeeDeduction > 0 : true,
             },
             settings
           );
 
-          // Allowances breakdown
-          const allowances = emp.allowances || 0;
-          const houseRent = roundCurrency(allowances * 0.5);
-          const medical = roundCurrency(allowances * 0.3);
-          const transport = roundCurrency(allowances * 0.2);
-
-          return {
-            id: generateId(),
-            employeeId: emp.id,
-            employeeName: emp.fullName,
-            department: emp.department,
-            designation: emp.designation,
-            month,
-            year,
-            basicSalary: roundCurrency(emp.basicSalary),
-            allowances: roundCurrency(emp.allowances),
-            bonus: roundCurrency(emp.bonus || 0),
-            overtime: roundCurrency(emp.overtime || 0),
+          const fullUpdated: PayrollRecord = {
+            ...updated,
             grossSalary: calc.grossSalary,
-            deductions: roundCurrency(emp.deductions || 0),
-            tax: roundCurrency(emp.tax || 0),
-            unpaidLeaveDays: absentDays,
-            absentDays: absentDays,
             leaveDeduction: calc.leaveDeduction,
-            absenceDeduction: calc.leaveDeduction,
             loanDeduction: calc.loanDeduction,
             pfEmployeeDeduction: calc.pfEmployeeDeduction,
             pfEmployerContribution: calc.pfEmployerContribution,
             totalDeductions: calc.totalDeductions,
             netSalary: calc.netSalary,
-            status: 'draft',
-            createdAt: now,
-            createdBy,
-            breakdown: {
-              houseRent,
-              medical,
-              transport,
-              otherAllowances: 0,
-            },
           };
-        });
 
-        set((state) => {
-          // If replaceExisting is true, remove any previous DRAFT records for the same month/year
-          let existingRecords = state.payrollRecords;
-          if (replaceExisting) {
-            existingRecords = existingRecords.filter(
-              (r) => !(r.month === month && r.year === year && r.status === 'draft')
-            );
-          }
-          return {
-            payrollRecords: [...existingRecords, ...records],
-          };
-        });
+          supabase
+            .from('payroll_records')
+            .update(payrollToRow(fullUpdated))
+            .eq('id', id)
+            .then(({ error }) => {
+              if (error) console.error('Failed to update payroll record in Supabase:', error);
+            });
 
-        return records;
-      },
-      approvePayroll: (ids, approvedBy) => {
-        const now = new Date().toISOString();
-        const recordsToApprove = get().payrollRecords.filter(
-          (r) => ids.includes(r.id) && r.status === 'draft'
-        );
-
-        set((state) => ({
-          payrollRecords: state.payrollRecords.map((record) =>
-            ids.includes(record.id) && record.status === 'draft'
-              ? { ...record, status: 'approved', approvedBy, approvedAt: now }
-              : record
-          ),
-        }));
-
-        // Notify each employee
-        recordsToApprove.forEach((rec) => {
-          useNotificationStore.getState().addNotification({
-            title: `Salary Approved — ${getMonthName(rec.month)} ${rec.year}`,
-            message: `Your salary payslip of ৳${rec.netSalary.toLocaleString()} has been approved and queued for payment.`,
-            type: 'info',
-            link: `/payslips/${rec.id}`,
-            targetEmployeeId: rec.employeeId,
-          });
-        });
-      },
-      markAsPaid: (ids, paidBy, paymentMethod, transactionRef) => {
-        const now = new Date().toISOString();
-        const txRef =
-          transactionRef || `TXN-${Date.now().toString(36).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;
-
-        // Automatically record installment deductions in useLoanStore for approved records transitioning to paid
-        const approvedRecords = get().payrollRecords.filter(
-          (record) => ids.includes(record.id) && record.status === 'approved'
-        );
-
-        approvedRecords.forEach((record) => {
-          if (record.loanDeduction && record.loanDeduction > 0) {
-            useLoanStore.getState().recordInstallmentDeduction(
-              record.employeeId,
-              record.month,
-              record.year,
-              record.id,
-              record.loanDeduction
-            );
-          }
-
-          // Notify employee of payment
-          useNotificationStore.getState().addNotification({
-            title: `Salary Disbursed — ${getMonthName(record.month)} ${record.year}`,
-            message: `Your net salary of ৳${record.netSalary.toLocaleString()} has been disbursed via ${paymentMethod.toUpperCase()}. Ref: ${txRef}.`,
-            type: 'success',
-            link: `/payslips/${record.id}`,
-            targetEmployeeId: record.employeeId,
-          });
-        });
-
-        set((state) => ({
-          payrollRecords: state.payrollRecords.map((record) =>
-            ids.includes(record.id) && record.status === 'approved'
-              ? {
-                  ...record,
-                  status: 'paid',
-                  paidBy,
-                  paidAt: now,
-                  paymentDate: now.split('T')[0],
-                  paymentMethod,
-                  transactionRef: txRef,
-                }
-              : record
-          ),
-        }));
-      },
-      updatePayrollRecord: (id, updates) => {
-        const settings = useSettingsStore.getState().settings;
-        set((state) => ({
-          payrollRecords: state.payrollRecords.map((record) => {
-            if (record.id === id && record.status === 'draft') {
-              const updated = { ...record, ...updates };
-              const calc = calculateFullSalary(
-                {
-                  basicSalary: updated.basicSalary,
-                  allowances: updated.allowances,
-                  bonus: updated.bonus,
-                  overtime: updated.overtime,
-                  deductions: updated.deductions,
-                  tax: updated.tax,
-                  unpaidLeaveDays: updated.unpaidLeaveDays,
-                  loanInstallment: updated.loanDeduction,
-                  pfEligible: updated.pfEmployeeDeduction ? updated.pfEmployeeDeduction > 0 : true,
-                },
-                settings
-              );
-
-              return {
-                ...updated,
-                grossSalary: calc.grossSalary,
-                leaveDeduction: calc.leaveDeduction,
-                loanDeduction: calc.loanDeduction,
-                pfEmployeeDeduction: calc.pfEmployeeDeduction,
-                pfEmployerContribution: calc.pfEmployerContribution,
-                totalDeductions: calc.totalDeductions,
-                netSalary: calc.netSalary,
-              };
-            }
-            return record;
-          }),
-        }));
-      },
-      deletePayrollRecord: (id) => {
-        set((state) => ({
-          payrollRecords: state.payrollRecords.filter(
-            (record) => record.id !== id || record.status !== 'draft'
-          ),
-        }));
-      },
-      getPayrollByMonth: (month, year) => {
-        return get().payrollRecords.filter(
-          (record) => record.month === month && record.year === year
-        );
-      },
-      getPayrollByEmployee: (employeeId) => {
-        return get().payrollRecords.filter((record) => record.employeeId === employeeId);
-      },
-      getPayrollByStatus: (status) => {
-        return get().payrollRecords.filter((record) => record.status === status);
-      },
-      getPayrollById: (id) => {
-        return get().payrollRecords.find((record) => record.id === id);
-      },
-      getMonthlyStats: (month, year) => {
-        const records = get().getPayrollByMonth(month, year);
-        let total = 0,
-          paid = 0,
-          pending = 0,
-          draft = 0;
-        records.forEach((r) => {
-          total += r.netSalary;
-          if (r.status === 'paid') paid += r.netSalary;
-          else if (r.status === 'approved') pending += r.netSalary;
-          else if (r.status === 'draft') draft += r.netSalary;
-        });
-        return {
-          total: roundCurrency(total),
-          paid: roundCurrency(paid),
-          pending: roundCurrency(pending),
-          draft: roundCurrency(draft),
-        };
-      },
-      getSalaryTrends: (monthsCount) => {
-        const trends: SalaryTrend[] = [];
-        const records = get().payrollRecords;
-
-        const d = new Date();
-        d.setMonth(d.getMonth() - monthsCount + 1);
-
-        for (let i = 0; i < monthsCount; i++) {
-          const m = d.getMonth() + 1;
-          const y = d.getFullYear();
-          const monthRecords = records.filter((r) => r.month === m && r.year === y);
-          const total = monthRecords.reduce((acc, r) => acc + r.netSalary, 0);
-          trends.push({ month: `${m}/${y}`, total: roundCurrency(total) });
-          d.setMonth(d.getMonth() + 1);
+          return fullUpdated;
         }
-        return trends;
-      },
-      getDepartmentSalary: (month, year) => {
-        const records = get().getPayrollByMonth(month, year);
-        const deptTotals: Record<string, number> = {};
-        records.forEach((r) => {
-          if (!deptTotals[r.department]) {
-            deptTotals[r.department] = 0;
-          }
-          deptTotals[r.department] += r.netSalary;
-        });
-        return Object.entries(deptTotals).map(([department, total]) => ({
-          department,
-          total: roundCurrency(total),
-        }));
-      },
-    }),
-    {
-      name: 'flowpay-payroll',
+        return record;
+      }),
+    }));
+  },
+
+  deletePayrollRecord: (id) => {
+    set((state) => ({
+      payrollRecords: state.payrollRecords.filter(
+        (record) => record.id !== id || record.status !== 'draft'
+      ),
+    }));
+
+    supabase
+      .from('payroll_records')
+      .delete()
+      .eq('id', id)
+      .eq('status', 'draft')
+      .then(({ error }) => {
+        if (error) console.error('Failed to delete draft payroll from Supabase:', error);
+      });
+  },
+
+  getPayrollByMonth: (month, year) => {
+    return get().payrollRecords.filter(
+      (record) => record.month === month && record.year === year
+    );
+  },
+
+  getPayrollByEmployee: (employeeId) => {
+    return get().payrollRecords.filter((record) => record.employeeId === employeeId);
+  },
+
+  getPayrollByStatus: (status) => {
+    return get().payrollRecords.filter((record) => record.status === status);
+  },
+
+  getPayrollById: (id) => {
+    return get().payrollRecords.find((record) => record.id === id);
+  },
+
+  getMonthlyStats: (month, year) => {
+    const records = get().getPayrollByMonth(month, year);
+    let total = 0,
+      paid = 0,
+      pending = 0,
+      draft = 0;
+    records.forEach((r) => {
+      total += r.netSalary;
+      if (r.status === 'paid') paid += r.netSalary;
+      else if (r.status === 'approved') pending += r.netSalary;
+      else if (r.status === 'draft') draft += r.netSalary;
+    });
+    return {
+      total: roundCurrency(total),
+      paid: roundCurrency(paid),
+      pending: roundCurrency(pending),
+      draft: roundCurrency(draft),
+    };
+  },
+
+  getSalaryTrends: (monthsCount) => {
+    const trends: SalaryTrend[] = [];
+    const records = get().payrollRecords;
+
+    const d = new Date();
+    d.setMonth(d.getMonth() - monthsCount + 1);
+
+    for (let i = 0; i < monthsCount; i++) {
+      const m = d.getMonth() + 1;
+      const y = d.getFullYear();
+      const monthRecords = records.filter((r) => r.month === m && r.year === y);
+      const total = monthRecords.reduce((acc, r) => acc + r.netSalary, 0);
+      trends.push({ month: `${m}/${y}`, total: roundCurrency(total) });
+      d.setMonth(d.getMonth() + 1);
     }
-  )
-);
+    return trends;
+  },
+
+  getDepartmentSalary: (month, year) => {
+    const records = get().getPayrollByMonth(month, year);
+    const deptTotals: Record<string, number> = {};
+    records.forEach((r) => {
+      if (!deptTotals[r.department]) {
+        deptTotals[r.department] = 0;
+      }
+      deptTotals[r.department] += r.netSalary;
+    });
+    return Object.entries(deptTotals).map(([department, total]) => ({
+      department,
+      total: roundCurrency(total),
+    }));
+  },
+}));

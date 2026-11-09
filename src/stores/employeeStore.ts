@@ -1,10 +1,13 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
 import { Employee, EmployeeDocument } from '@/lib/types';
-import { generateEmployeeId, generateId } from '@/lib/utils';
+import { generateId } from '@/lib/utils';
+import { supabase } from '@/lib/supabase';
+import { rowToEmployee, employeeToRow } from '@/lib/dbMappers';
 
 interface EmployeeState {
   employees: Employee[];
+  isLoading: boolean;
+  fetchEmployees: () => Promise<void>;
   addEmployee: (employee: Omit<Employee, 'id' | 'createdAt' | 'updatedAt' | 'employeeId'>) => Employee;
   updateEmployee: (id: string, updates: Partial<Employee>) => void;
   deleteEmployee: (id: string) => void;
@@ -20,138 +23,188 @@ interface EmployeeState {
   getNextEmployeeId: () => string;
 }
 
-export const useEmployeeStore = create<EmployeeState>()(
-  persist(
-    (set, get) => ({
-      employees: [],
-      addEmployee: (employeeData) => {
-        const newId = get().getNextEmployeeId();
-        const now = new Date().toISOString();
-        const newEmployee: Employee = {
-          ...employeeData,
-          id: generateId(),
-          employeeId: newId,
-          leaveBalance: employeeData.leaveBalance || { casual: 10, sick: 14, annual: 15 },
-          documents: employeeData.documents || [],
-          createdAt: now,
-          updatedAt: now,
-        };
+export const useEmployeeStore = create<EmployeeState>((set, get) => ({
+  employees: [],
+  isLoading: false,
 
-        set((state) => ({
-          employees: [...state.employees, newEmployee],
-        }));
+  fetchEmployees: async () => {
+    try {
+      set({ isLoading: true });
+      const { data, error } = await supabase
+        .from('employees')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-        return newEmployee;
-      },
-      updateEmployee: (id, updates) =>
-        set((state) => ({
-          employees: state.employees.map((emp) =>
-            emp.id === id ? { ...emp, ...updates, updatedAt: new Date().toISOString() } : emp
-          ),
-        })),
-      deleteEmployee: (id) =>
-        set((state) => ({
-          employees: state.employees.filter((emp) => emp.id !== id),
-        })),
-      toggleEmployeeStatus: (id) =>
-        set((state) => ({
-          employees: state.employees.map((emp) =>
-            emp.id === id
-              ? {
-                  ...emp,
-                  status: emp.status === 'active' ? 'inactive' : 'active',
-                  updatedAt: new Date().toISOString(),
-                }
-              : emp
-          ),
-        })),
-      addDocument: (employeeId, documentData) =>
-        set((state) => ({
-          employees: state.employees.map((emp) => {
-            if (emp.id !== employeeId) return emp;
-            const newDoc: EmployeeDocument = {
-              ...documentData,
-              id: generateId(),
-              uploadDate: new Date().toISOString(),
-            };
-            return {
-              ...emp,
-              documents: [...(emp.documents || []), newDoc],
-              updatedAt: new Date().toISOString(),
-            };
-          }),
-        })),
-      deleteDocument: (employeeId, documentId) =>
-        set((state) => ({
-          employees: state.employees.map((emp) => {
-            if (emp.id !== employeeId) return emp;
-            return {
-              ...emp,
-              documents: (emp.documents || []).filter((d) => d.id !== documentId),
-              updatedAt: new Date().toISOString(),
-            };
-          }),
-        })),
-      deductLeaveBalance: (employeeId, leaveType, days) =>
-        set((state) => ({
-          employees: state.employees.map((emp) => {
-            if (emp.id !== employeeId && emp.employeeId !== employeeId) return emp;
-            const currentBalance = emp.leaveBalance || { casual: 10, sick: 14, annual: 15 };
-            const currentTypeDays = currentBalance[leaveType] ?? 0;
-            const newTypeDays = Math.max(0, currentTypeDays - days);
-            return {
-              ...emp,
-              leaveBalance: {
-                ...currentBalance,
-                [leaveType]: newTypeDays,
-              },
-              updatedAt: new Date().toISOString(),
-            };
-          }),
-        })),
-      updateDepartmentName: (oldName, newName) =>
-        set((state) => ({
-          employees: state.employees.map((emp) =>
-            emp.department === oldName
-              ? { ...emp, department: newName, updatedAt: new Date().toISOString() }
-              : emp
-          ),
-        })),
-      getEmployeeById: (id) => {
-        return get().employees.find((emp) => emp.id === id || emp.employeeId === id);
-      },
-      getEmployeesByDepartment: (dept) => {
-        return get().employees.filter((emp) => emp.department === dept);
-      },
-      getActiveEmployees: () => {
-        return get().employees.filter((emp) => emp.status === 'active');
-      },
-      searchEmployees: (query) => {
-        const q = query.toLowerCase();
-        return get().employees.filter(
-          (emp) =>
-            emp.fullName.toLowerCase().includes(q) ||
-            emp.email.toLowerCase().includes(q) ||
-            emp.employeeId.toLowerCase().includes(q) ||
-            emp.department.toLowerCase().includes(q)
-        );
-      },
-      getNextEmployeeId: () => {
-        let maxNum = 0;
-        get().employees.forEach((e) => {
-          const match = e.employeeId?.match(/EMP-(\d+)/i);
-          if (match) {
-            const num = parseInt(match[1], 10);
-            if (!isNaN(num) && num > maxNum) {
-              maxNum = num;
-            }
-          }
-        });
-        return `EMP-${String(maxNum + 1).padStart(3, '0')}`;
-      },
-    }),
-    {
-      name: 'flowpay-employees',
+      if (error) throw error;
+      set({ employees: (data || []).map(rowToEmployee), isLoading: false });
+    } catch (err) {
+      console.error('Error fetching employees from Supabase:', err);
+      set({ isLoading: false });
     }
-  )
-);
+  },
+
+  addEmployee: (employeeData) => {
+    const newId = get().getNextEmployeeId();
+    const now = new Date().toISOString();
+    const newEmployee: Employee = {
+      ...employeeData,
+      id: generateId(),
+      employeeId: newId,
+      leaveBalance: employeeData.leaveBalance || { casual: 10, sick: 14, annual: 15 },
+      documents: employeeData.documents || [],
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    // Update state optimistically
+    set((state) => ({
+      employees: [newEmployee, ...state.employees],
+    }));
+
+    // Sync with Supabase
+    supabase
+      .from('employees')
+      .insert(employeeToRow(newEmployee))
+      .then(({ error }) => {
+        if (error) console.error('Failed to sync new employee to Supabase:', error);
+      });
+
+    return newEmployee;
+  },
+
+  updateEmployee: (id, updates) => {
+    const now = new Date().toISOString();
+    set((state) => ({
+      employees: state.employees.map((emp) =>
+        emp.id === id ? { ...emp, ...updates, updatedAt: now } : emp
+      ),
+    }));
+
+    const updatedEmp = get().employees.find((e) => e.id === id);
+    if (updatedEmp) {
+      supabase
+        .from('employees')
+        .update(employeeToRow(updatedEmp))
+        .eq('id', id)
+        .then(({ error }) => {
+          if (error) console.error('Failed to sync employee update to Supabase:', error);
+        });
+    }
+  },
+
+  deleteEmployee: (id) => {
+    set((state) => ({
+      employees: state.employees.filter((emp) => emp.id !== id),
+    }));
+
+    supabase
+      .from('employees')
+      .delete()
+      .eq('id', id)
+      .then(({ error }) => {
+        if (error) console.error('Failed to delete employee from Supabase:', error);
+      });
+  },
+
+  toggleEmployeeStatus: (id) => {
+    const emp = get().employees.find((e) => e.id === id);
+    if (!emp) return;
+    const newStatus = emp.status === 'active' ? 'inactive' : 'active';
+    get().updateEmployee(id, { status: newStatus });
+  },
+
+  addDocument: (employeeId, documentData) => {
+    const emp = get().employees.find((e) => e.id === employeeId);
+    if (!emp) return;
+
+    const newDoc: EmployeeDocument = {
+      ...documentData,
+      id: generateId(),
+      uploadDate: new Date().toISOString().split('T')[0],
+    };
+
+    const newDocs = [...(emp.documents || []), newDoc];
+    get().updateEmployee(employeeId, { documents: newDocs });
+  },
+
+  deleteDocument: (employeeId, documentId) => {
+    const emp = get().employees.find((e) => e.id === employeeId);
+    if (!emp) return;
+
+    const newDocs = (emp.documents || []).filter((doc) => doc.id !== documentId);
+    get().updateEmployee(employeeId, { documents: newDocs });
+  },
+
+  deductLeaveBalance: (employeeId, leaveType, days) => {
+    const emp = get().employees.find((e) => e.id === employeeId);
+    if (!emp) return;
+
+    const currentBalance = emp.leaveBalance || { casual: 10, sick: 14, annual: 15 };
+    const updatedBalance = {
+      ...currentBalance,
+      [leaveType]: Math.max(0, currentBalance[leaveType] - days),
+    };
+
+    get().updateEmployee(employeeId, { leaveBalance: updatedBalance });
+  },
+
+  updateDepartmentName: (oldName, newName) => {
+    set((state) => ({
+      employees: state.employees.map((emp) =>
+        emp.department === oldName ? { ...emp, department: newName, updatedAt: new Date().toISOString() } : emp
+      ),
+    }));
+
+    supabase
+      .from('employees')
+      .update({ department: newName, updated_at: new Date().toISOString() })
+      .eq('department', oldName)
+      .then(({ error }) => {
+        if (error) console.error('Failed to update department in Supabase:', error);
+      });
+  },
+
+  getEmployeeById: (id) => {
+    return get().employees.find((emp) => emp.id === id);
+  },
+
+  getEmployeesByDepartment: (dept) => {
+    return get().employees.filter(
+      (emp) => emp.department.toLowerCase() === dept.toLowerCase()
+    );
+  },
+
+  getActiveEmployees: () => {
+    return get().employees.filter((emp) => emp.status === 'active');
+  },
+
+  searchEmployees: (query) => {
+    const cleanQuery = query.toLowerCase().trim();
+    if (!cleanQuery) return get().employees;
+
+    return get().employees.filter(
+      (emp) =>
+        emp.fullName.toLowerCase().includes(cleanQuery) ||
+        emp.employeeId.toLowerCase().includes(cleanQuery) ||
+        emp.email.toLowerCase().includes(cleanQuery) ||
+        emp.department.toLowerCase().includes(cleanQuery) ||
+        emp.designation.toLowerCase().includes(cleanQuery)
+    );
+  },
+
+  getNextEmployeeId: () => {
+    const currentEmployees = get().employees;
+    let maxNum = 0;
+    for (const emp of currentEmployees) {
+      const match = (emp.employeeId || '').match(/EMP-(\d+)/i);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (!isNaN(num) && num > maxNum) {
+          maxNum = num;
+        }
+      }
+    }
+    const nextNum = maxNum + 1;
+    return `EMP-${String(nextNum).padStart(3, '0')}`;
+  },
+}));

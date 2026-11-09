@@ -43,7 +43,7 @@ export default function ProfilePage() {
     toast.success('Profile details updated successfully');
   };
 
-  const handleChangePassword = (e: React.FormEvent) => {
+  const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser) return;
     if (!currentPassword) {
@@ -59,7 +59,7 @@ export default function ProfilePage() {
       return;
     }
 
-    const res = changePassword(currentUser.id, currentPassword, newPassword);
+    const res = await changePassword(currentUser.id, currentPassword, newPassword);
     if (res.success) {
       toast.success(res.message);
       setCurrentPassword('');

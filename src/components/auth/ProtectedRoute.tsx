@@ -12,9 +12,20 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children, requiredPermissions, allowedRoles }: ProtectedRouteProps) {
-  const { currentUser: user, isAuthenticated } = useAuthStore();
+  const { currentUser: user, isAuthenticated, isLoading } = useAuthStore();
   const location = useLocation();
   const { hasPermission } = usePermissions();
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent" />
+          <p className="text-xs font-medium text-slate-500">Connecting to FlowPay...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!isAuthenticated || !user) {
     return <Navigate to="/login" state={{ from: location }} replace />;

@@ -1,12 +1,20 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
-import { AttendanceRecord, LeaveRequest, AttendanceStatus } from '@/lib/types';
+import { AttendanceRecord, LeaveRequest } from '@/lib/types';
 import { generateId, getLocalDateString } from '@/lib/utils';
 import { useEmployeeStore } from './employeeStore';
+import { supabase } from '@/lib/supabase';
+import {
+  rowToAttendance,
+  attendanceToRow,
+  rowToLeave,
+  leaveToRow,
+} from '@/lib/dbMappers';
 
 interface AttendanceState {
   attendanceRecords: AttendanceRecord[];
   leaveRequests: LeaveRequest[];
+  isLoading: boolean;
+  fetchAttendanceAndLeaves: () => Promise<void>;
   recordAttendance: (record: Omit<AttendanceRecord, 'id'>) => void;
   bulkRecordAttendance: (records: Omit<AttendanceRecord, 'id'>[]) => void;
   correctAttendance: (id: string, updates: Partial<AttendanceRecord>, correctedBy: string) => void;
@@ -27,201 +35,244 @@ interface AttendanceState {
   };
 }
 
-export const useAttendanceStore = create<AttendanceState>()(
-  persist(
-    (set, get) => ({
-      attendanceRecords: [],
-      leaveRequests: [],
-      recordAttendance: (recordData) =>
-        set((state) => {
-          // Check if already exists for employee and date
-          const existing = state.attendanceRecords.find(
-            (r) => r.employeeId === recordData.employeeId && r.date === recordData.date
-          );
-          if (existing) {
-            return {
-              attendanceRecords: state.attendanceRecords.map((r) =>
-                r.id === existing.id ? { ...r, ...recordData } : r
-              ),
-            };
-          }
-          return {
-            attendanceRecords: [
-              ...state.attendanceRecords,
-              { ...recordData, id: generateId() },
-            ],
-          };
-        }),
-      bulkRecordAttendance: (records) =>
-        set((state) => {
-          const newRecords = records.map((r) => ({ ...r, id: generateId() }));
-          return {
-            attendanceRecords: [...state.attendanceRecords, ...newRecords],
-          };
-        }),
-      correctAttendance: (id, updates, correctedBy) =>
-        set((state) => ({
-          attendanceRecords: state.attendanceRecords.map((r) =>
-            r.id === id
-              ? {
-                  ...r,
-                  ...updates,
-                  manualCorrection: true,
-                  correctedBy,
-                }
-              : r
-          ),
-        })),
-      checkIn: (employeeId, employeeName) => {
-        const today = getLocalDateString();
-        const nowTime = new Date().toTimeString().substring(0, 5); // HH:mm
-        const isLate = parseInt(nowTime.split(':')[0]) >= 9 && parseInt(nowTime.split(':')[1]) > 30; // 9:30 AM threshold
+export const useAttendanceStore = create<AttendanceState>((set, get) => ({
+  attendanceRecords: [],
+  leaveRequests: [],
+  isLoading: false,
 
-        get().recordAttendance({
-          employeeId,
-          employeeName,
-          date: today,
-          checkIn: nowTime,
-          status: isLate ? 'late' : 'present',
-        });
-      },
-      checkOut: (employeeId) => {
-        const today = getLocalDateString();
-        const nowTime = new Date().toTimeString().substring(0, 5);
+  fetchAttendanceAndLeaves: async () => {
+    try {
+      set({ isLoading: true });
+      const [attRes, leaveRes] = await Promise.all([
+        supabase.from('attendance_records').select('*').order('date', { ascending: false }),
+        supabase.from('leave_requests').select('*').order('applied_at', { ascending: false }),
+      ]);
 
-        set((state) => ({
-          attendanceRecords: state.attendanceRecords.map((r) =>
-            r.employeeId === employeeId && r.date === today
-              ? { ...r, checkOut: nowTime }
-              : r
-          ),
-        }));
-      },
-      applyLeave: (leaveData) => {
-        const newLeave: LeaveRequest = {
-          ...leaveData,
-          id: generateId(),
-          status: 'pending',
-          appliedAt: new Date().toISOString(),
-        };
-        set((state) => ({
-          leaveRequests: [newLeave, ...state.leaveRequests],
-        }));
-      },
-      approveLeave: (id, approvedBy) => {
-        const targetLeave = get().leaveRequests.find((l) => l.id === id);
-        if (targetLeave && ['casual', 'sick', 'annual'].includes(targetLeave.leaveType)) {
-          useEmployeeStore.getState().deductLeaveBalance(
-            targetLeave.employeeId,
-            targetLeave.leaveType as 'casual' | 'sick' | 'annual',
-            targetLeave.daysCount
-          );
-        }
-
-        // Record on_leave attendance record for leave start date
-        if (targetLeave) {
-          const leaveDate = targetLeave.startDate;
-          const existing = get().attendanceRecords.find(
-            (r) => r.employeeId === targetLeave.employeeId && r.date === leaveDate
-          );
-          if (!existing) {
-            get().recordAttendance({
-              employeeId: targetLeave.employeeId,
-              employeeName: targetLeave.employeeName,
-              date: leaveDate,
-              status: 'on_leave',
-              notes: `Approved ${targetLeave.leaveType} leave`,
-            });
-          }
-        }
-
-        set((state) => ({
-          leaveRequests: state.leaveRequests.map((l) =>
-            l.id === id
-              ? {
-                  ...l,
-                  status: 'approved',
-                  approvedBy,
-                  approvedAt: new Date().toISOString(),
-                }
-              : l
-          ),
-        }));
-      },
-      rejectLeave: (id, rejectionReason, rejectedBy) => {
-        set((state) => ({
-          leaveRequests: state.leaveRequests.map((l) =>
-            l.id === id
-              ? {
-                  ...l,
-                  status: 'rejected',
-                  approvedBy: rejectedBy,
-                  rejectionReason,
-                  approvedAt: new Date().toISOString(),
-                }
-              : l
-          ),
-        }));
-      },
-      getAttendanceByDate: (date) => {
-        return get().attendanceRecords.filter((r) => r.date === date);
-      },
-      getAttendanceByEmployee: (employeeId) => {
-        return get().attendanceRecords.filter((r) => r.employeeId === employeeId);
-      },
-      getMonthlyEmployeeSummary: (employeeId, month, year) => {
-        const monthPrefix = `${year}-${String(month).padStart(2, '0')}`;
-        const records = get().attendanceRecords.filter(
-          (r) => r.employeeId === employeeId && r.date.startsWith(monthPrefix)
-        );
-
-        let present = 0;
-        let absent = 0;
-        let late = 0;
-        let halfDay = 0;
-        let onLeave = 0;
-
-        records.forEach((r) => {
-          if (r.status === 'present') present++;
-          else if (r.status === 'absent') absent++;
-          else if (r.status === 'late') late++;
-          else if (r.status === 'half_day') halfDay++;
-          else if (r.status === 'on_leave') onLeave++;
-        });
-
-        // Check approved unpaid leaves overlapping this specific month
-        const targetMonthStart = new Date(year, month - 1, 1);
-        const targetMonthEnd = new Date(year, month, 0, 23, 59, 59, 999);
-
-        let unpaidLeaveDays = 0;
-        const approvedUnpaid = get().leaveRequests.filter(
-          (l) => l.employeeId === employeeId && l.status === 'approved' && l.leaveType === 'unpaid'
-        );
-
-        approvedUnpaid.forEach((l) => {
-          const start = new Date(l.startDate);
-          const end = new Date(l.endDate);
-          if (start <= targetMonthEnd && end >= targetMonthStart) {
-            const effectiveStart = start > targetMonthStart ? start : targetMonthStart;
-            const effectiveEnd = end < targetMonthEnd ? end : targetMonthEnd;
-            const diffTime = effectiveEnd.getTime() - effectiveStart.getTime();
-            const days = Math.round(diffTime / (1000 * 60 * 60 * 24)) + 1;
-            unpaidLeaveDays += Math.max(0, Math.min(days, l.daysCount));
-          }
-        });
-
-        return {
-          present,
-          absent,
-          late,
-          halfDay,
-          onLeave,
-          unpaidLeaveDays,
-        };
-      },
-    }),
-    {
-      name: 'flowpay-attendance',
+      set({
+        attendanceRecords: (attRes.data || []).map(rowToAttendance),
+        leaveRequests: (leaveRes.data || []).map(rowToLeave),
+        isLoading: false,
+      });
+    } catch (err) {
+      console.error('Error fetching attendance & leaves:', err);
+      set({ isLoading: false });
     }
-  )
-);
+  },
+
+  recordAttendance: (recordData) => {
+    const existing = get().attendanceRecords.find(
+      (r) => r.employeeId === recordData.employeeId && r.date === recordData.date
+    );
+
+    const recordId = existing ? existing.id : generateId();
+    const fullRecord: AttendanceRecord = { ...recordData, id: recordId };
+
+    set((state) => ({
+      attendanceRecords: existing
+        ? state.attendanceRecords.map((r) => (r.id === existing.id ? fullRecord : r))
+        : [fullRecord, ...state.attendanceRecords],
+    }));
+
+    supabase
+      .from('attendance_records')
+      .upsert(attendanceToRow(fullRecord))
+      .then(({ error }) => {
+        if (error) console.error('Failed to sync attendance to Supabase:', error);
+      });
+  },
+
+  bulkRecordAttendance: (records) => {
+    const fullRecords: AttendanceRecord[] = records.map((r) => ({ ...r, id: generateId() }));
+    set((state) => ({
+      attendanceRecords: [...fullRecords, ...state.attendanceRecords],
+    }));
+
+    supabase
+      .from('attendance_records')
+      .insert(fullRecords.map(attendanceToRow))
+      .then(({ error }) => {
+        if (error) console.error('Failed to sync bulk attendance to Supabase:', error);
+      });
+  },
+
+  correctAttendance: (id, updates, correctedBy) => {
+    set((state) => ({
+      attendanceRecords: state.attendanceRecords.map((r) =>
+        r.id === id ? { ...r, ...updates, manualCorrection: true, correctedBy } : r
+      ),
+    }));
+
+    const rec = get().attendanceRecords.find((r) => r.id === id);
+    if (rec) {
+      supabase
+        .from('attendance_records')
+        .update(attendanceToRow(rec))
+        .eq('id', id)
+        .then(({ error }) => {
+          if (error) console.error('Failed to update attendance correction in Supabase:', error);
+        });
+    }
+  },
+
+  checkIn: (employeeId, employeeName) => {
+    const today = getLocalDateString();
+    const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    // Mark as late if checked in after 09:30
+    const [hours, mins] = nowTime.split(':').map(Number);
+    const isLate = hours > 9 || (hours === 9 && mins > 30);
+
+    get().recordAttendance({
+      employeeId,
+      employeeName,
+      date: today,
+      checkIn: nowTime,
+      status: isLate ? 'late' : 'present',
+    });
+  },
+
+  checkOut: (employeeId) => {
+    const today = getLocalDateString();
+    const existing = get().attendanceRecords.find(
+      (r) => r.employeeId === employeeId && r.date === today
+    );
+
+    if (existing) {
+      const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      get().correctAttendance(
+        existing.id,
+        {
+          checkOut: nowTime,
+        },
+        'System'
+      );
+    }
+  },
+
+  applyLeave: (leave) => {
+    const newLeave: LeaveRequest = {
+      ...leave,
+      id: generateId(),
+      appliedAt: new Date().toISOString(),
+      status: 'pending',
+    };
+
+    set((state) => ({
+      leaveRequests: [newLeave, ...state.leaveRequests],
+    }));
+
+    supabase
+      .from('leave_requests')
+      .insert(leaveToRow(newLeave))
+      .then(({ error }) => {
+        if (error) console.error('Failed to sync leave request to Supabase:', error);
+      });
+  },
+
+  approveLeave: (id, approvedBy) => {
+    const leave = get().leaveRequests.find((l) => l.id === id);
+    if (!leave) return;
+
+    const approvedAt = new Date().toISOString();
+    set((state) => ({
+      leaveRequests: state.leaveRequests.map((l) =>
+        l.id === id ? { ...l, status: 'approved', approvedBy, approvedAt } : l
+      ),
+    }));
+
+    supabase
+      .from('leave_requests')
+      .update({
+        status: 'approved',
+        approved_by: approvedBy,
+        approved_at: approvedAt,
+      })
+      .eq('id', id)
+      .then(({ error }) => {
+        if (error) console.error('Failed to update leave approval in Supabase:', error);
+      });
+
+    // Deduct leave balance if paid leave
+    if (leave.leaveType !== 'unpaid') {
+      useEmployeeStore
+        .getState()
+        .deductLeaveBalance(leave.employeeId, leave.leaveType as any, leave.daysCount);
+    }
+  },
+
+  rejectLeave: (id, rejectionReason, rejectedBy) => {
+    set((state) => ({
+      leaveRequests: state.leaveRequests.map((l) =>
+        l.id === id ? { ...l, status: 'rejected', rejectionReason, approvedBy: rejectedBy } : l
+      ),
+    }));
+
+    supabase
+      .from('leave_requests')
+      .update({
+        status: 'rejected',
+        rejection_reason: rejectionReason,
+        approved_by: rejectedBy,
+      })
+      .eq('id', id)
+      .then(({ error }) => {
+        if (error) console.error('Failed to update leave rejection in Supabase:', error);
+      });
+  },
+
+  getAttendanceByDate: (date) => {
+    return get().attendanceRecords.filter((r) => r.date === date);
+  },
+
+  getAttendanceByEmployee: (employeeId) => {
+    return get().attendanceRecords.filter((r) => r.employeeId === employeeId);
+  },
+
+  getMonthlyEmployeeSummary: (employeeId, month, year) => {
+    const prefix = `${year}-${String(month).padStart(2, '0')}`;
+    const employeeRecords = get().attendanceRecords.filter(
+      (r) => r.employeeId === employeeId && r.date.startsWith(prefix)
+    );
+
+    const summary = {
+      present: 0,
+      absent: 0,
+      late: 0,
+      halfDay: 0,
+      onLeave: 0,
+      unpaidLeaveDays: 0,
+    };
+
+    employeeRecords.forEach((r) => {
+      if (r.status === 'present') summary.present++;
+      else if (r.status === 'absent') summary.absent++;
+      else if (r.status === 'late') summary.late++;
+      else if (r.status === 'half_day') summary.halfDay++;
+      else if (r.status === 'on_leave') summary.onLeave++;
+    });
+
+    // Calculate unpaid leave days for this month
+    const monthStart = new Date(year, month - 1, 1);
+    const monthEnd = new Date(year, month, 0, 23, 59, 59, 999);
+
+    const approvedUnpaidLeaves = get().leaveRequests.filter(
+      (l) => l.employeeId === employeeId && l.status === 'approved' && l.leaveType === 'unpaid'
+    );
+
+    approvedUnpaidLeaves.forEach((l) => {
+      const lStart = new Date(l.startDate);
+      const lEnd = new Date(l.endDate);
+
+      const overlapStart = lStart > monthStart ? lStart : monthStart;
+      const overlapEnd = lEnd < monthEnd ? lEnd : monthEnd;
+
+      if (overlapStart <= overlapEnd) {
+        const diffTime = Math.abs(overlapEnd.getTime() - overlapStart.getTime());
+        const days = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+        summary.unpaidLeaveDays += Math.min(days, l.daysCount);
+      }
+    });
+
+    return summary;
+  },
+}));
