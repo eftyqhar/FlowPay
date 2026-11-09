@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { User, UserRole } from '@/lib/types';
 import { supabase } from '@/lib/supabase';
 import { rowToUser, userToRow } from '@/lib/dbMappers';
+import { useEmployeeStore } from './employeeStore';
 
 interface AuthState {
   currentUser: User | null;
@@ -53,6 +54,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
         if (userProfile) {
           const mapped = rowToUser(userProfile);
+          if (!mapped.employeeId) {
+            const { data: emp } = await supabase
+              .from('employees')
+              .select('employee_id')
+              .eq('email', mapped.email)
+              .maybeSingle();
+            if (emp?.employee_id) {
+              mapped.employeeId = emp.employee_id;
+              await supabase.from('users').update({ employee_id: emp.employee_id }).eq('id', mapped.id);
+            }
+          }
           set({ currentUser: mapped, isAuthenticated: true, isLoading: false });
         } else {
           // Fallback user from session metadata
@@ -121,6 +133,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         let appUser: User;
         if (userProfile) {
           appUser = rowToUser(userProfile);
+          if (!appUser.employeeId) {
+            const { data: emp } = await supabase
+              .from('employees')
+              .select('employee_id')
+              .eq('email', appUser.email)
+              .maybeSingle();
+            if (emp?.employee_id) {
+              appUser.employeeId = emp.employee_id;
+              await supabase.from('users').update({ employee_id: emp.employee_id }).eq('id', appUser.id);
+            }
+          }
         } else {
           appUser = {
             id: data.user.id,
@@ -198,8 +221,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           });
         }
 
-        set({ currentUser: newUser, isAuthenticated: true, isLoading: false });
+        // Fetch user profile with trigger-assigned employee_id
+        const { data: updatedProfile } = await supabase
+          .from('users')
+          .select('*')
+          .eq('email', cleanEmail)
+          .maybeSingle();
+
+        const finalUser = updatedProfile ? rowToUser(updatedProfile) : newUser;
+
+        set({ currentUser: finalUser, isAuthenticated: true, isLoading: false });
         get().fetchUsers();
+        useEmployeeStore.getState().fetchEmployees();
         return { success: true };
       }
 
@@ -235,7 +268,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const row = userToRow(user);
       const { error } = await supabase.from('users').insert(row);
       if (error) throw error;
-      set((state) => ({ users: [user, ...state.users] }));
 
       if (password) {
         supabase.auth.signUp({
@@ -244,6 +276,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           options: { data: { name: user.name, role: user.role } },
         }).catch((e) => console.log('Auth user sign up note:', e));
       }
+
+      await get().fetchUsers();
+      await useEmployeeStore.getState().fetchEmployees();
     } catch (err) {
       console.error('Failed to add user:', err);
     }

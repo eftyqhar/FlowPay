@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useEmployeeStore } from '@/stores/employeeStore';
 import { useDepartmentStore } from '@/stores/departmentStore';
@@ -20,9 +20,13 @@ import { Employee } from '@/lib/types';
 
 export default function AllEmployeesPage() {
   const navigate = useNavigate();
-  const { employees, updateEmployee } = useEmployeeStore();
+  const { employees, updateEmployee, fetchEmployees } = useEmployeeStore();
   const { departments } = useDepartmentStore();
   const { currentUser } = useAuthStore();
+
+  useEffect(() => {
+    fetchEmployees();
+  }, [fetchEmployees]);
 
   const userRole = (currentUser?.role || '').toLowerCase();
   const canManageEmployees = ['owner', 'admin', 'hr'].includes(userRole);

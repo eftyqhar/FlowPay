@@ -244,6 +244,66 @@ CREATE TRIGGER on_auth_user_created_auto_confirm
   FOR EACH ROW EXECUTE FUNCTION public.auto_confirm_new_user();
 
 UPDATE auth.users SET email_confirmed_at = now() WHERE email_confirmed_at IS NULL;
+
+-- Automatically assign any newly registered user to employees directory
+CREATE OR REPLACE FUNCTION public.handle_new_user_employee_assign()
+RETURNS trigger AS $$
+DECLARE
+  v_next_num INT;
+  v_next_id TEXT;
+  v_existing_emp_id TEXT;
+BEGIN
+  SELECT employee_id INTO v_existing_emp_id 
+  FROM public.employees 
+  WHERE lower(email) = lower(NEW.email) 
+  LIMIT 1;
+
+  IF v_existing_emp_id IS NOT NULL THEN
+    NEW.employee_id := v_existing_emp_id;
+  ELSIF NEW.employee_id IS NULL THEN
+    SELECT COALESCE(MAX(NULLIF(regexp_replace(employee_id, '^EMP-', '', 'i'), '')::INT), 0) + 1
+    INTO v_next_num
+    FROM public.employees
+    WHERE employee_id ~* '^EMP-[0-9]+$';
+
+    v_next_id := 'EMP-' || lpad(v_next_num::TEXT, 3, '0');
+
+    INSERT INTO public.employees (
+      id, employee_id, full_name, email, phone, photo, department, designation,
+      joining_date, basic_salary, allowances, bonus, overtime, deductions, tax,
+      bank_info, payment_method, status, pf_eligible, leave_balance, documents
+    ) VALUES (
+      'emp-' || substr(NEW.id, 1, 13),
+      v_next_id,
+      NEW.name,
+      lower(NEW.email),
+      '',
+      COALESCE(NEW.avatar, 'https://ui-avatars.com/api/?name=' || replace(NEW.name, ' ', '+') || '&background=random'),
+      'Operations',
+      CASE WHEN NEW.role = 'owner' THEN 'Managing Director / Owner' ELSE 'Employee' END,
+      to_char(CURRENT_DATE, 'YYYY-MM-DD'),
+      CASE WHEN NEW.role = 'owner' THEN 50000 ELSE 30000 END,
+      0, 0, 0, 0, 0,
+      '{"bankName": "Dutch-Bangla Bank", "accountNumber": "1000000000", "routingNumber": "090270001", "accountType": "savings"}'::jsonb,
+      'bank_transfer',
+      'active',
+      true,
+      '{"casual": 10, "sick": 14, "annual": 15}'::jsonb,
+      '[]'::jsonb
+    ) ON CONFLICT (id) DO NOTHING;
+
+    NEW.employee_id := v_next_id;
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS on_user_created_assign_employee ON public.users;
+CREATE TRIGGER on_user_created_assign_employee
+  BEFORE INSERT ON public.users
+  FOR EACH ROW
+  EXECUTE FUNCTION public.handle_new_user_employee_assign();
 `;
 
 async function runMigration() {
