@@ -213,7 +213,7 @@ export interface DepartmentSalary {
 }
 
 // Attendance
-export type AttendanceStatus = 'present' | 'absent' | 'late' | 'half_day' | 'on_leave';
+export type AttendanceStatus = 'present' | 'absent' | 'late' | 'early_checkout' | 'half_day' | 'on_leave';
 
 export interface AttendanceRecord {
   id: string;
@@ -226,6 +226,8 @@ export interface AttendanceRecord {
   notes?: string;
   manualCorrection?: boolean;
   correctedBy?: string;
+  lateCheckIn?: boolean;
+  earlyCheckOut?: boolean;
 }
 
 // Leave Application

@@ -29,6 +29,7 @@ interface AttendanceState {
     present: number;
     absent: number;
     late: number;
+    earlyCheckout: number;
     halfDay: number;
     onLeave: number;
     unpaidLeaveDays: number;
@@ -125,11 +126,13 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
 
   checkIn: (employeeId, employeeName) => {
     const today = getLocalDateString();
-    const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const now = new Date();
+    const hours = now.getHours();
+    const mins = now.getMinutes();
+    const nowTime = `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
 
-    // Mark as late if checked in after 09:30
-    const [hours, mins] = nowTime.split(':').map(Number);
-    const isLate = hours > 9 || (hours === 9 && mins > 30);
+    // Mark as late if checked in after 09:15 (09:00 office baseline + 15m grace)
+    const isLate = hours > 9 || (hours === 9 && mins > 15);
 
     get().recordAttendance({
       employeeId,
@@ -137,6 +140,7 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
       date: today,
       checkIn: nowTime,
       status: isLate ? 'late' : 'present',
+      lateCheckIn: isLate,
     });
   },
 
@@ -147,11 +151,20 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
     );
 
     if (existing) {
-      const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const now = new Date();
+      const hours = now.getHours();
+      const mins = now.getMinutes();
+      const nowTime = `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+
+      // Early check-out if before standard working hours (before 17:00 / 5:00 PM for standard 8h day)
+      const isEarly = hours < 17;
+
       get().correctAttendance(
         existing.id,
         {
           checkOut: nowTime,
+          earlyCheckOut: isEarly,
+          status: existing.status === 'present' && isEarly ? 'early_checkout' : existing.status,
         },
         'System'
       );
@@ -247,6 +260,7 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
       present: 0,
       absent: 0,
       late: 0,
+      earlyCheckout: 0,
       halfDay: 0,
       onLeave: 0,
       unpaidLeaveDays: 0,
@@ -259,8 +273,15 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
       if (r.status === 'present') summary.present++;
       else if (r.status === 'absent') summary.absent++;
       else if (r.status === 'late') summary.late++;
+      else if (r.status === 'early_checkout') {
+        summary.present++;
+        summary.earlyCheckout++;
+      }
       else if (r.status === 'half_day') summary.halfDay++;
       else if (r.status === 'on_leave') summary.onLeave++;
+
+      if (r.lateCheckIn && r.status !== 'late') summary.late++;
+      if (r.earlyCheckOut && r.status !== 'early_checkout') summary.earlyCheckout++;
 
       // Detect overtime based on Daily Working Hours (default 8h)
       if (r.checkIn && r.checkOut) {

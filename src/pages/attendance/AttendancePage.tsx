@@ -50,13 +50,49 @@ import { useAuditStore } from '@/stores/auditStore';
 import { useNotificationStore } from '@/stores/notificationStore';
 import { ATTENDANCE_STATUSES, LEAVE_STATUSES } from '@/lib/constants';
 import { formatDate, getLocalDateString } from '@/lib/utils';
-import { AttendanceStatus, LeaveType } from '@/lib/types';
+import { AttendanceRecord, AttendanceStatus, LeaveType } from '@/lib/types';
 import { toast } from 'sonner';
+
+function parseTimeStringToMinutes(timeStr?: string): number | null {
+  if (!timeStr) return null;
+  const cleaned = timeStr.trim();
+  const isPM = /pm/i.test(cleaned);
+  const isAM = /am/i.test(cleaned);
+  const numPart = cleaned.replace(/[^0-9:]/g, '');
+  const [hStr, mStr] = numPart.split(':');
+  let hours = parseInt(hStr, 10);
+  const mins = parseInt(mStr, 10) || 0;
+  if (isNaN(hours)) return null;
+
+  if (isPM && hours < 12) hours += 12;
+  if (isAM && hours === 12) hours = 0;
+
+  return hours * 60 + mins;
+}
+
+function isLateCheckIn(checkIn?: string): boolean {
+  const mins = parseTimeStringToMinutes(checkIn);
+  if (mins === null) return false;
+  // Late if check-in after 09:15 AM (555 minutes: 09:00 office baseline + 15m grace)
+  return mins > 555;
+}
+
+function isEarlyCheckOut(checkOut?: string): boolean {
+  const mins = parseTimeStringToMinutes(checkOut);
+  if (mins === null) return false;
+  // Early check-out if before standard 17:00 / 05:00 PM (1020 minutes)
+  return mins < 1020;
+}
+
+interface AttendanceLedgerItem extends AttendanceRecord {
+  isSynthetic?: boolean;
+}
 
 export default function AttendancePage() {
   const {
     attendanceRecords,
     leaveRequests,
+    recordAttendance,
     checkIn,
     checkOut,
     correctAttendance,
@@ -116,26 +152,136 @@ export default function AttendancePage() {
   const [newCheckOut, setNewCheckOut] = useState('');
   const [correctionNote, setCorrectionNote] = useState('');
 
+  const activeEmployees = useMemo(
+    () => employees.filter((e) => e.status === 'active'),
+    [employees]
+  );
+
   // Filtered attendance records for selected date
-  const dateRecords = useMemo(() => {
+  const dateRecords: AttendanceLedgerItem[] = useMemo(() => {
     if (isEmployee) {
       if (!myEmployee) return [];
-      return attendanceRecords.filter((r) => r.employeeId === myEmployee.id);
+      const userRecords: AttendanceLedgerItem[] = attendanceRecords.filter((r) => r.employeeId === myEmployee.id);
+      const hasToday = userRecords.some((r) => r.date === today);
+      if (!hasToday) {
+        const approvedLeaveToday = leaveRequests.find(
+          (l) =>
+            l.employeeId === myEmployee.id &&
+            l.status === 'approved' &&
+            l.startDate <= today &&
+            l.endDate >= today
+        );
+        userRecords.unshift({
+          id: `today-rec-${myEmployee.id}`,
+          employeeId: myEmployee.id,
+          employeeName: myEmployee.fullName,
+          date: today,
+          status: (approvedLeaveToday ? 'on_leave' : 'absent') as AttendanceStatus,
+          notes: approvedLeaveToday
+            ? `On approved ${approvedLeaveToday.leaveType} leave`
+            : 'Not checked in yet',
+          isSynthetic: true,
+          lateCheckIn: false,
+          earlyCheckOut: false,
+          manualCorrection: false,
+        });
+      }
+      return userRecords.sort((a, b) => b.date.localeCompare(a.date));
     }
-    return attendanceRecords.filter((r) => r.date === selectedDate);
-  }, [attendanceRecords, selectedDate, isEmployee, myEmployee]);
+
+    // HR/Admin view: Show comprehensive ledger for all active employees for selectedDate
+    return activeEmployees.map((emp): AttendanceLedgerItem => {
+      const existing = attendanceRecords.find(
+        (r) => r.employeeId === emp.id && r.date === selectedDate
+      );
+      if (existing) {
+        const late = existing.lateCheckIn || existing.status === 'late' || isLateCheckIn(existing.checkIn);
+        const early = existing.earlyCheckOut || existing.status === 'early_checkout' || (existing.checkOut ? isEarlyCheckOut(existing.checkOut) : false);
+        return {
+          ...existing,
+          lateCheckIn: late,
+          earlyCheckOut: early,
+          isSynthetic: false,
+        };
+      }
+
+      // Check if employee has an approved leave for selectedDate
+      const approvedLeave = leaveRequests.find(
+        (l) =>
+          l.employeeId === emp.id &&
+          l.status === 'approved' &&
+          l.startDate <= selectedDate &&
+          l.endDate >= selectedDate
+      );
+      if (approvedLeave) {
+        return {
+          id: `syn-leave-${emp.id}-${selectedDate}`,
+          employeeId: emp.id,
+          employeeName: emp.fullName,
+          date: selectedDate,
+          checkIn: undefined,
+          checkOut: undefined,
+          status: 'on_leave' as AttendanceStatus,
+          notes: `Approved ${approvedLeave.leaveType.toUpperCase()} leave (${approvedLeave.daysCount} days)`,
+          isSynthetic: true,
+          lateCheckIn: false,
+          earlyCheckOut: false,
+          manualCorrection: false,
+        };
+      }
+
+      // If neither, employee is Absent
+      return {
+        id: `syn-absent-${emp.id}-${selectedDate}`,
+        employeeId: emp.id,
+        employeeName: emp.fullName,
+        date: selectedDate,
+        checkIn: undefined,
+        checkOut: undefined,
+        status: 'absent' as AttendanceStatus,
+        notes: 'Absent / No punch recorded',
+        isSynthetic: true,
+        lateCheckIn: false,
+        earlyCheckOut: false,
+        manualCorrection: false,
+      };
+    });
+  }, [attendanceRecords, leaveRequests, selectedDate, isEmployee, myEmployee, activeEmployees, today]);
 
   // Daily stats for selected date
   const stats = useMemo(() => {
-    const records = attendanceRecords.filter((r) => r.date === selectedDate);
-    const present = records.filter((r) => r.status === 'present').length;
-    const late = records.filter((r) => r.status === 'late').length;
-    const onLeave = records.filter((r) => r.status === 'on_leave').length;
-    const explicitlyAbsent = records.filter((r) => r.status === 'absent').length;
-    const unrecorded = Math.max(0, employees.filter((e) => e.status === 'active').length - records.length);
-    const absent = explicitlyAbsent + unrecorded;
-    return { present, late, onLeave, absent };
-  }, [attendanceRecords, selectedDate, employees]);
+    let present = 0;
+    let late = 0;
+    let earlyCheckout = 0;
+    let onLeave = 0;
+    let absent = 0;
+
+    dateRecords.forEach((r) => {
+      if (r.status === 'present') {
+        present++;
+      } else if (r.status === 'late') {
+        late++;
+      } else if (r.status === 'early_checkout') {
+        earlyCheckout++;
+        present++;
+      } else if (r.status === 'on_leave') {
+        onLeave++;
+      } else if (r.status === 'absent') {
+        absent++;
+      } else if (r.status === 'half_day') {
+        present++;
+      }
+
+      if (r.lateCheckIn && r.status !== 'late') {
+        late++;
+      }
+      if (r.earlyCheckOut && r.status !== 'early_checkout') {
+        earlyCheckout++;
+      }
+    });
+
+    return { present, late, earlyCheckout, onLeave, absent };
+  }, [dateRecords]);
 
   const handleCheckIn = () => {
     if (!myEmployee) {
@@ -143,13 +289,23 @@ export default function AttendancePage() {
       return;
     }
     checkIn(myEmployee.id, myEmployee.fullName);
-    toast.success(`Check-in recorded at ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`);
+    const now = new Date();
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const isLate = isLateCheckIn(timeStr);
+    toast.success(
+      `Check-in recorded at ${timeStr}${isLate ? ' (Late Check-in)' : ''}`
+    );
   };
 
   const handleCheckOut = () => {
     if (!myEmployee) return;
     checkOut(myEmployee.id);
-    toast.success(`Check-out recorded at ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`);
+    const now = new Date();
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const isEarly = isEarlyCheckOut(timeStr);
+    toast.success(
+      `Check-out recorded at ${timeStr}${isEarly ? ' (Early Check-out)' : ''}`
+    );
   };
 
   const handleApplyLeave = (e: React.FormEvent) => {
@@ -200,10 +356,10 @@ export default function AttendancePage() {
 
   const handleOpenCorrection = (rec: any) => {
     setSelectedAttRecord(rec);
-    setNewStatus(rec.status);
+    setNewStatus(rec.status === 'absent' ? 'present' : rec.status);
     setNewCheckIn(rec.checkIn || '09:00');
-    setNewCheckOut(rec.checkOut || '17:30');
-    setCorrectionNote(rec.notes || '');
+    setNewCheckOut(rec.checkOut || '17:00');
+    setCorrectionNote(rec.isSynthetic ? 'Manual punch recorded by HR/Admin' : (rec.notes || ''));
     setCorrectModalOpen(true);
   };
 
@@ -211,26 +367,63 @@ export default function AttendancePage() {
     e.preventDefault();
     if (!selectedAttRecord) return;
 
-    correctAttendance(
-      selectedAttRecord.id,
-      {
-        status: newStatus,
-        checkIn: newCheckIn,
-        checkOut: newCheckOut,
-        notes: correctionNote ? `Correction: ${correctionNote}` : 'Manually corrected by HR/Admin',
-      },
-      currentUser?.name || 'Admin'
-    );
+    const isLate = isLateCheckIn(newCheckIn);
+    const isEarly = newCheckOut ? isEarlyCheckOut(newCheckOut) : false;
+    let finalStatus = newStatus;
+    if (newStatus === 'present') {
+      if (isLate) finalStatus = 'late';
+      else if (isEarly) finalStatus = 'early_checkout';
+    }
 
-    addLog({
-      userId: currentUser?.id || 'USR-002',
-      userName: currentUser?.name || 'Admin',
-      action: 'Correct Attendance',
-      module: 'Attendance',
-      details: `Corrected attendance for ${selectedAttRecord.employeeName} on ${selectedAttRecord.date} to ${newStatus.toUpperCase()}`,
-    });
+    if (selectedAttRecord.isSynthetic) {
+      recordAttendance({
+        employeeId: selectedAttRecord.employeeId,
+        employeeName: selectedAttRecord.employeeName,
+        date: selectedAttRecord.date,
+        checkIn: newCheckIn || undefined,
+        checkOut: newCheckOut || undefined,
+        status: finalStatus,
+        lateCheckIn: isLate,
+        earlyCheckOut: isEarly,
+        manualCorrection: true,
+        correctedBy: currentUser?.name || 'Admin',
+        notes: correctionNote ? `Admin Record: ${correctionNote}` : 'Recorded manually by HR/Admin',
+      });
 
-    toast.success('Attendance record updated and logged');
+      addLog({
+        userId: currentUser?.id || 'USR-002',
+        userName: currentUser?.name || 'Admin',
+        action: 'Record Attendance',
+        module: 'Attendance',
+        details: `Manually recorded attendance for ${selectedAttRecord.employeeName} on ${selectedAttRecord.date} as ${finalStatus.toUpperCase()}`,
+      });
+
+      toast.success(`Attendance recorded for ${selectedAttRecord.employeeName}`);
+    } else {
+      correctAttendance(
+        selectedAttRecord.id,
+        {
+          status: finalStatus,
+          checkIn: newCheckIn || undefined,
+          checkOut: newCheckOut || undefined,
+          lateCheckIn: isLate,
+          earlyCheckOut: isEarly,
+          notes: correctionNote ? `Correction: ${correctionNote}` : 'Manually corrected by HR/Admin',
+        },
+        currentUser?.name || 'Admin'
+      );
+
+      addLog({
+        userId: currentUser?.id || 'USR-002',
+        userName: currentUser?.name || 'Admin',
+        action: 'Correct Attendance',
+        module: 'Attendance',
+        details: `Corrected attendance for ${selectedAttRecord.employeeName} on ${selectedAttRecord.date} to ${finalStatus.toUpperCase()}`,
+      });
+
+      toast.success('Attendance record updated and logged');
+    }
+
     setCorrectModalOpen(false);
   };
 
@@ -459,16 +652,21 @@ export default function AttendancePage() {
 
       {/* Daily Metrics */}
       {!isEmployee && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           <StatCard
             title="Present Today"
             value={stats.present.toString()}
             icon={CheckCircle2}
           />
           <StatCard
-            title="Late Arrivals"
+            title="Late Check-ins"
             value={stats.late.toString()}
             icon={AlertTriangle}
+          />
+          <StatCard
+            title="Early Check-outs"
+            value={stats.earlyCheckout.toString()}
+            icon={Clock}
           />
           <StatCard
             title="On Approved Leave"
@@ -476,7 +674,7 @@ export default function AttendancePage() {
             icon={Calendar}
           />
           <StatCard
-            title="Unreported / Absent"
+            title="Absent"
             value={stats.absent.toString()}
             icon={XCircle}
           />
@@ -501,7 +699,7 @@ export default function AttendancePage() {
                   {isEmployee ? 'Attendance Record' : `Attendance for ${formatDate(selectedDate)}`}
                 </CardTitle>
                 <CardDescription>
-                  Showing {dateRecords.length} recorded entries
+                  Showing {dateRecords.length} recorded entries ({stats.absent} Absent, {stats.late} Late, {stats.earlyCheckout} Early Check-out)
                 </CardDescription>
               </div>
 
@@ -531,7 +729,7 @@ export default function AttendancePage() {
                       <TableHead>Check-Out</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Notes & Audit</TableHead>
-                      {canManageAttendance && <TableHead className="w-[80px] text-right">Actions</TableHead>}
+                      {canManageAttendance && <TableHead className="w-[100px] text-right">Actions</TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -542,51 +740,104 @@ export default function AttendancePage() {
                         </TableCell>
                       </TableRow>
                     ) : (
-                      dateRecords.map((rec) => (
-                        <TableRow key={rec.id}>
-                          <TableCell className="font-medium text-slate-900">
-                            {rec.employeeName}
-                          </TableCell>
-                          <TableCell className="text-sm text-slate-600">
-                            {formatDate(rec.date)}
-                          </TableCell>
-                          <TableCell className="font-mono text-xs">
-                            {rec.checkIn || '-'}
-                          </TableCell>
-                          <TableCell className="font-mono text-xs">
-                            {rec.checkOut || '-'}
-                          </TableCell>
-                          <TableCell>
-                            <span
-                              className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold border ${
-                                ATTENDANCE_STATUSES[rec.status]?.color || 'bg-slate-100'
-                              }`}
-                            >
-                              {ATTENDANCE_STATUSES[rec.status]?.label || rec.status}
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-xs text-slate-500">
-                            {rec.manualCorrection ? (
-                              <span className="text-indigo-600 font-medium">
-                                Corrected: {rec.notes || 'By Admin'}
-                              </span>
-                            ) : (
-                              rec.notes || '-'
-                            )}
-                          </TableCell>
-                          {canManageAttendance && (
-                            <TableCell className="text-right">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleOpenCorrection(rec)}
-                              >
-                                <Edit2 className="w-3.5 h-3.5 mr-1" /> Edit
-                              </Button>
+                      dateRecords.map((rec) => {
+                        const isLate = rec.lateCheckIn || rec.status === 'late' || isLateCheckIn(rec.checkIn);
+                        const isEarly = rec.earlyCheckOut || rec.status === 'early_checkout' || (rec.checkOut ? isEarlyCheckOut(rec.checkOut) : false);
+
+                        return (
+                          <TableRow
+                            key={rec.id}
+                            className={rec.status === 'absent' ? 'bg-red-50/20' : undefined}
+                          >
+                            <TableCell className="font-medium text-slate-900">
+                              <div className="flex items-center gap-2">
+                                {rec.status === 'absent' && (
+                                  <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block shrink-0" title="Absent" />
+                                )}
+                                {rec.status === 'late' && (
+                                  <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block shrink-0" title="Late Check-in" />
+                                )}
+                                {rec.status === 'early_checkout' && (
+                                  <span className="w-2.5 h-2.5 rounded-full bg-orange-500 inline-block shrink-0" title="Early Check-out" />
+                                )}
+                                {rec.status === 'present' && (
+                                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block shrink-0" title="Present" />
+                                )}
+                                {rec.status === 'on_leave' && (
+                                  <span className="w-2.5 h-2.5 rounded-full bg-purple-500 inline-block shrink-0" title="On Leave" />
+                                )}
+                                <span>{rec.employeeName}</span>
+                              </div>
                             </TableCell>
-                          )}
-                        </TableRow>
-                      ))
+                            <TableCell className="text-sm text-slate-600">
+                              {formatDate(rec.date)}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-1.5 font-mono text-xs">
+                                <span>{rec.checkIn || '-'}</span>
+                                {rec.checkIn && isLate && (
+                                  <Badge variant="outline" className="px-1.5 py-0 text-[10px] font-semibold bg-amber-50 text-amber-700 border-amber-300">
+                                    Late
+                                  </Badge>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-1.5 font-mono text-xs">
+                                <span>{rec.checkOut || '-'}</span>
+                                {rec.checkOut && isEarly && (
+                                  <Badge variant="outline" className="px-1.5 py-0 text-[10px] font-semibold bg-orange-50 text-orange-700 border-orange-300">
+                                    Early
+                                  </Badge>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex flex-wrap items-center gap-1">
+                                <span
+                                  className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold border ${
+                                    ATTENDANCE_STATUSES[rec.status as AttendanceStatus]?.color || 'bg-slate-100 text-slate-800 border-slate-200'
+                                  }`}
+                                >
+                                  {ATTENDANCE_STATUSES[rec.status as AttendanceStatus]?.label || rec.status}
+                                </span>
+                                {rec.status === 'late' && isEarly && (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-orange-100 text-orange-800 border border-orange-200">
+                                    Early Check-out
+                                  </span>
+                                )}
+                                {rec.status === 'early_checkout' && isLate && (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-800 border border-amber-200">
+                                    Late Check-in
+                                  </span>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-xs text-slate-500">
+                              {rec.manualCorrection ? (
+                                <span className="text-indigo-600 font-medium">
+                                  Corrected: {rec.notes || 'By Admin'}
+                                </span>
+                              ) : (
+                                rec.notes || '-'
+                              )}
+                            </TableCell>
+                            {canManageAttendance && (
+                              <TableCell className="text-right">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleOpenCorrection(rec)}
+                                  className={rec.status === 'absent' ? 'text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 font-medium' : ''}
+                                >
+                                  <Edit2 className="w-3.5 h-3.5 mr-1" />
+                                  {rec.status === 'absent' ? 'Mark / Edit' : 'Edit'}
+                                </Button>
+                              </TableCell>
+                            )}
+                          </TableRow>
+                        );
+                      })
                     )}
                   </TableBody>
                 </Table>
@@ -698,12 +949,14 @@ export default function AttendancePage() {
       <Dialog open={correctModalOpen} onOpenChange={setCorrectModalOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Manual Attendance Correction</DialogTitle>
+            <DialogTitle>
+              {selectedAttRecord?.isSynthetic ? 'Record Attendance / Manual Punch' : 'Manual Attendance Correction'}
+            </DialogTitle>
           </DialogHeader>
           {selectedAttRecord && (
             <form onSubmit={handleSaveCorrection} className="space-y-4 pt-2">
               <p className="text-xs text-slate-500">
-                Updating attendance for <strong>{selectedAttRecord.employeeName}</strong> on{' '}
+                {selectedAttRecord.isSynthetic ? 'Recording' : 'Updating'} attendance for <strong>{selectedAttRecord.employeeName}</strong> on{' '}
                 <strong>{formatDate(selectedAttRecord.date)}</strong>. An audit log entry will be created.
               </p>
 
@@ -718,7 +971,8 @@ export default function AttendancePage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="present">Present (On Time)</SelectItem>
-                    <SelectItem value="late">Late Arrival</SelectItem>
+                    <SelectItem value="late">Late Check-in</SelectItem>
+                    <SelectItem value="early_checkout">Early Check-out</SelectItem>
                     <SelectItem value="half_day">Half Day</SelectItem>
                     <SelectItem value="absent">Absent</SelectItem>
                     <SelectItem value="on_leave">On Approved Leave</SelectItem>
@@ -740,7 +994,7 @@ export default function AttendancePage() {
                   <Input
                     value={newCheckOut}
                     onChange={(e) => setNewCheckOut(e.target.value)}
-                    placeholder="17:30"
+                    placeholder="17:00"
                   />
                 </div>
               </div>
@@ -750,7 +1004,7 @@ export default function AttendancePage() {
                 <Input
                   value={correctionNote}
                   onChange={(e) => setCorrectionNote(e.target.value)}
-                  placeholder="e.g. Card scanner hardware malfunction"
+                  placeholder="e.g. Card scanner hardware malfunction / Manual verification"
                   required
                 />
               </div>
@@ -760,7 +1014,7 @@ export default function AttendancePage() {
                   Cancel
                 </Button>
                 <Button type="submit" className="bg-indigo-600 hover:bg-indigo-700">
-                  Save & Log Correction
+                  {selectedAttRecord.isSynthetic ? 'Save & Record Punch' : 'Save & Log Correction'}
                 </Button>
               </DialogFooter>
             </form>

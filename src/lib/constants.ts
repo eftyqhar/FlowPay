@@ -37,7 +37,8 @@ export const EMPLOYEE_STATUSES = {
 
 export const ATTENDANCE_STATUSES: Record<AttendanceStatus, { label: string; color: string }> = {
   present: { label: 'Present', color: 'bg-green-100 text-green-800 border-green-200' },
-  late: { label: 'Late', color: 'bg-amber-100 text-amber-800 border-amber-200' },
+  late: { label: 'Late Check-in', color: 'bg-amber-100 text-amber-800 border-amber-200' },
+  early_checkout: { label: 'Early Check-out', color: 'bg-orange-100 text-orange-800 border-orange-200' },
   half_day: { label: 'Half Day', color: 'bg-blue-100 text-blue-800 border-blue-200' },
   absent: { label: 'Absent', color: 'bg-red-100 text-red-800 border-red-200' },
   on_leave: { label: 'On Leave', color: 'bg-purple-100 text-purple-800 border-purple-200' },

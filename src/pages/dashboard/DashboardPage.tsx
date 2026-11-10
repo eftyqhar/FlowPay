@@ -95,8 +95,8 @@ export default function DashboardPage() {
   // Today attendance metrics
   const today = getLocalDateString();
   const todayRecords = attendanceRecords.filter((r) => r.date === today);
-  const presentCount = todayRecords.filter((r) => r.status === 'present').length;
-  const lateCount = todayRecords.filter((r) => r.status === 'late').length;
+  const presentCount = todayRecords.filter((r) => r.status === 'present' || r.status === 'early_checkout').length;
+  const lateCount = todayRecords.filter((r) => r.status === 'late' || r.lateCheckIn).length;
   const onLeaveCount = todayRecords.filter((r) => r.status === 'on_leave').length;
 
   // Pending items queue

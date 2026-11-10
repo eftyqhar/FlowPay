@@ -67,6 +67,8 @@ CREATE TABLE public.attendance_records (
   notes TEXT,
   manual_correction BOOLEAN DEFAULT false,
   corrected_by TEXT,
+  late_check_in BOOLEAN DEFAULT false,
+  early_check_out BOOLEAN DEFAULT false,
   created_at TIMESTAMPTZ DEFAULT now()
 );
 

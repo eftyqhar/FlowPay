@@ -128,6 +128,8 @@ export const rowToAttendance = (row: any): AttendanceRecord => ({
   notes: row.notes || undefined,
   manualCorrection: row.manual_correction ?? false,
   correctedBy: row.corrected_by || undefined,
+  lateCheckIn: row.late_check_in ?? false,
+  earlyCheckOut: row.early_check_out ?? false,
 });
 
 export const attendanceToRow = (rec: Partial<AttendanceRecord>) => ({
@@ -141,6 +143,8 @@ export const attendanceToRow = (rec: Partial<AttendanceRecord>) => ({
   notes: rec.notes ?? null,
   manual_correction: rec.manualCorrection ?? false,
   corrected_by: rec.correctedBy ?? null,
+  late_check_in: rec.lateCheckIn ?? false,
+  early_check_out: rec.earlyCheckOut ?? false,
 });
 
 // 4. Leave Request
