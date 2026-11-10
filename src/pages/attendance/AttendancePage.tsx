@@ -118,7 +118,8 @@ export default function AttendancePage() {
 
   // Filtered attendance records for selected date
   const dateRecords = useMemo(() => {
-    if (isEmployee && myEmployee) {
+    if (isEmployee) {
+      if (!myEmployee) return [];
       return attendanceRecords.filter((r) => r.employeeId === myEmployee.id);
     }
     return attendanceRecords.filter((r) => r.date === selectedDate);
@@ -289,8 +290,8 @@ export default function AttendancePage() {
     setRejectingLeaveReq(null);
   };
 
-  const visibleLeaves = isEmployee && myEmployee
-    ? leaveRequests.filter((l) => l.employeeId === myEmployee.id)
+  const visibleLeaves = isEmployee
+    ? (myEmployee ? leaveRequests.filter((l) => l.employeeId === myEmployee.id) : [])
     : leaveRequests;
 
   return (

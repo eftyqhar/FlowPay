@@ -218,7 +218,7 @@ export default function GeneratePayrollPage() {
           deductions: emp.deductions,
           tax: emp.tax,
           unpaidLeaveDays: adj.unpaidLeaveDays,
-          absentDays: adj.unpaidLeaveDays,
+          absentDays: 0,
           loanInstallment: adj.loanInstallment,
           pfEligible: emp.pfEligible ?? true,
         },
@@ -281,7 +281,7 @@ export default function GeneratePayrollPage() {
         deductions: c.employee.deductions,
         tax: c.employee.tax,
         unpaidLeaveDays: c.unpaidLeaveDays,
-        absentDays: c.unpaidLeaveDays,
+        absentDays: 0,
         loanInstallment: c.loanInstallment,
         pfEligible: c.employee.pfEligible ?? true,
       }));

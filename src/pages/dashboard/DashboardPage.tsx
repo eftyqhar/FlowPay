@@ -192,7 +192,31 @@ export default function DashboardPage() {
   const months = Array.from({ length: 12 }, (_, i) => i + 1);
 
   // ===================== EMPLOYEE PORTAL VIEW =====================
-  if (isEmployee && myEmployee) {
+  if (isEmployee) {
+    if (!myEmployee) {
+      return (
+        <div className="flex flex-col items-center justify-center p-12 bg-white rounded-lg border text-center space-y-4 max-w-lg mx-auto mt-8">
+          <div className="h-12 w-12 rounded-full bg-amber-100 flex items-center justify-center text-amber-600">
+            <AlertCircle className="w-6 h-6" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-slate-800">Employee Profile Pending Link</h2>
+            <p className="text-sm text-slate-500 mt-1">
+              Welcome, {currentUser?.name || 'Employee'}. Your account ({currentUser?.email}) has been registered with the Employee role. Your profile record is being finalized by HR.
+            </p>
+          </div>
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={() => navigate('/profile')}>
+              View Account Profile
+            </Button>
+            <Button onClick={() => window.location.reload()} className="bg-indigo-600 hover:bg-indigo-700">
+              Refresh Data
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">

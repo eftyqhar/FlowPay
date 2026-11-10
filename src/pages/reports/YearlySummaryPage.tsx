@@ -27,19 +27,25 @@ export default function YearlySummaryPage() {
 
   const kpi = useMemo(() => {
     let gross = 0;
-    let net = 0;
+    let paidNet = 0;
+    let pendingNet = 0;
     const emps = new Set<string>();
     yearData.forEach(p => {
       gross += p.grossSalary;
-      net += p.netSalary;
+      if (p.status === 'paid') {
+        paidNet += p.netSalary;
+      } else {
+        pendingNet += p.netSalary;
+      }
       emps.add(p.employeeId);
     });
     return {
-      totalPayroll: net,
+      totalPayroll: paidNet,
+      pendingPayroll: pendingNet,
       totalGross: gross,
       totalEmployees: emps.size,
-      avgMonthly: net / 12,
-      avgSalary: emps.size ? net / (emps.size * 12) : 0
+      avgMonthly: paidNet / 12,
+      avgSalary: emps.size ? paidNet / (emps.size * 12) : 0
     };
   }, [yearData]);
 
@@ -107,10 +113,10 @@ export default function YearlySummaryPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <StatCard title="Total Payroll Expenditure" value={formatCurrency(kpi.totalPayroll)} icon={Wallet} />
+        <StatCard title="Total Disbursed (Paid)" value={formatCurrency(kpi.totalPayroll)} icon={Wallet} />
+        <StatCard title="Pending / Draft" value={formatCurrency(kpi.pendingPayroll)} icon={TrendingUp} />
         <StatCard title="Total Employees" value={kpi.totalEmployees.toString()} icon={Users} />
-        <StatCard title="Avg Monthly Payroll" value={formatCurrency(kpi.avgMonthly)} icon={TrendingUp} />
-        <StatCard title="Avg Salary" value={formatCurrency(kpi.avgSalary)} icon={BarChart3} />
+        <StatCard title="Avg Disbursed / Month" value={formatCurrency(kpi.avgMonthly)} icon={BarChart3} />
       </div>
 
       <Card>

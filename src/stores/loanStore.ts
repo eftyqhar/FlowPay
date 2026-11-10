@@ -18,6 +18,12 @@ interface LoanState {
     payrollRecordId: string,
     customAmount?: number
   ) => number;
+  reverseInstallmentDeduction: (
+    employeeId: string,
+    month: number,
+    year: number,
+    payrollRecordId: string
+  ) => void;
   settleEarly: (id: string) => void;
   getActiveLoan: (employeeId: string) => LoanRecord | undefined;
   getLoansByEmployee: (employeeId: string) => LoanRecord[];
@@ -167,6 +173,55 @@ export const useLoanStore = create<LoanState>((set, get) => ({
       });
 
     return deductionAmount;
+  },
+
+  reverseInstallmentDeduction: (employeeId, month, year, payrollRecordId) => {
+    const loan = get().loans.find(
+      (l) =>
+        l.employeeId === employeeId &&
+        l.repayments.some(
+          (r) =>
+            (r.payrollRecordId && r.payrollRecordId === payrollRecordId) ||
+            (r.month === month && r.year === year)
+        )
+    );
+    if (!loan) return;
+
+    const matchedRepayment = loan.repayments.find(
+      (r) =>
+        (r.payrollRecordId && r.payrollRecordId === payrollRecordId) ||
+        (r.month === month && r.year === year)
+    );
+    if (!matchedRepayment) return;
+
+    const restoredBalance = loan.remainingBalance + matchedRepayment.amount;
+    const updatedRepayments = loan.repayments.filter((r) => r.id !== matchedRepayment.id);
+    const newStatus = restoredBalance > 0 ? 'active' : loan.status;
+
+    set((state) => ({
+      loans: state.loans.map((l) =>
+        l.id === loan.id
+          ? {
+              ...l,
+              remainingBalance: restoredBalance,
+              status: newStatus,
+              repayments: updatedRepayments,
+            }
+          : l
+      ),
+    }));
+
+    supabase
+      .from('loans')
+      .update({
+        remaining_balance: restoredBalance,
+        status: newStatus,
+        repayments: updatedRepayments,
+      })
+      .eq('id', loan.id)
+      .then(({ error }) => {
+        if (error) console.error('Failed to reverse loan installment in Supabase:', error);
+      });
   },
 
   settleEarly: (id) => {

@@ -62,7 +62,7 @@ export default function AllPayslipsPage() {
       .filter((p) => {
         // Enforce employee sees only own payslips
         if (isEmployee) {
-          if (myEmployee && p.employeeId !== myEmployee.id) return false;
+          if (!myEmployee || p.employeeId !== myEmployee.id) return false;
         }
 
         const matchSearch =

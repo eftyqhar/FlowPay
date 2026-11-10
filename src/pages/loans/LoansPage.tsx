@@ -85,7 +85,7 @@ export default function LoansPage() {
 
   // Selected employee for application
   const selectedEmpId = isEmployee
-    ? myEmployee?.id || employees[0]?.id || ''
+    ? myEmployee?.id || ''
     : employeeId || employees[0]?.id || '';
 
   const targetEmp = useMemo(() => {
@@ -151,7 +151,7 @@ export default function LoansPage() {
     let list = loans;
     if (isEmployee) {
       const empId = myEmployee?.id;
-      list = list.filter((l) => l.employeeId === empId);
+      list = empId ? list.filter((l) => l.employeeId === empId) : [];
     }
     if (statusFilter !== 'all') {
       list = list.filter((l) => l.status === statusFilter);

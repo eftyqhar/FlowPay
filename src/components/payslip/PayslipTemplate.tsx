@@ -183,7 +183,7 @@ export function PayslipTemplate({ payrollRecord, idSuffix = '' }: PayslipTemplat
 
             {payrollRecord.pfEmployeeDeduction && payrollRecord.pfEmployeeDeduction > 0 ? (
               <div className="flex justify-between text-red-600">
-                <span>Provident Fund (Employee 8.33%)</span>
+                <span>Provident Fund (Employee {settings?.pfEmployeePercent ? `${settings.pfEmployeePercent}%` : '8.33%'})</span>
                 <span className="tabular-nums font-medium">
                   -<CurrencyDisplay amount={payrollRecord.pfEmployeeDeduction} />
                 </span>

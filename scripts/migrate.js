@@ -209,7 +209,64 @@ CREATE TABLE public.users (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- Enable RLS and setup permissive policies for all tables
+-- Unique Constraints to prevent duplicate payroll drafts & attendance
+CREATE UNIQUE INDEX IF NOT EXISTS uq_payroll_emp_month_year ON public.payroll_records (employee_id, month, year);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_attendance_emp_date ON public.attendance_records (employee_id, date);
+
+-- 1. Helper function to get caller role from JWT email
+CREATE OR REPLACE FUNCTION public.current_user_role()
+RETURNS text AS $$
+DECLARE
+  v_role text;
+BEGIN
+  SELECT role INTO v_role 
+  FROM public.users 
+  WHERE lower(email) = lower(auth.jwt()->>'email')
+  LIMIT 1;
+  RETURN COALESCE(v_role, 'employee');
+END;
+$$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
+
+-- 2. Helper function to get caller employee_id from JWT email
+CREATE OR REPLACE FUNCTION public.current_user_employee_id()
+RETURNS text AS $$
+DECLARE
+  v_emp_id text;
+BEGIN
+  SELECT employee_id INTO v_emp_id 
+  FROM public.users 
+  WHERE lower(email) = lower(auth.jwt()->>'email')
+  LIMIT 1;
+  RETURN v_emp_id;
+END;
+$$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
+
+-- 3. Prevent Unauthorized Role Escalation Trigger
+CREATE OR REPLACE FUNCTION public.prevent_unauthorized_role_change()
+RETURNS trigger AS $$
+DECLARE
+  v_caller_role TEXT;
+  v_caller_email TEXT;
+BEGIN
+  IF NEW.role IS DISTINCT FROM OLD.role THEN
+    v_caller_email := auth.jwt()->>'email';
+    IF v_caller_email IS NOT NULL THEN
+      SELECT role INTO v_caller_role FROM public.users WHERE lower(email) = lower(v_caller_email);
+      IF v_caller_role IS NULL OR v_caller_role <> 'owner' THEN
+        RAISE EXCEPTION 'Unauthorized: Only the Super Admin / Owner can change user roles.';
+      END IF;
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS trg_prevent_role_escalation ON public.users;
+CREATE TRIGGER trg_prevent_role_escalation
+  BEFORE UPDATE ON public.users
+  FOR EACH ROW EXECUTE FUNCTION public.prevent_unauthorized_role_change();
+
+-- 4. Enable RLS and setup fine-grained policies
 DO $$
 DECLARE
   tbl text;
@@ -219,9 +276,201 @@ BEGIN
   LOOP
     EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY;', tbl);
     EXECUTE format('DROP POLICY IF EXISTS "Public access policy" ON public.%I;', tbl);
-    EXECUTE format('CREATE POLICY "Public access policy" ON public.%I FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);', tbl);
   END LOOP;
 END $$;
+
+-- Policies for public.company_settings
+DROP POLICY IF EXISTS "Settings viewable by authenticated and anon" ON public.company_settings;
+CREATE POLICY "Settings viewable by authenticated and anon"
+  ON public.company_settings FOR SELECT
+  TO anon, authenticated
+  USING (true);
+
+DROP POLICY IF EXISTS "Settings modifiable by owner and admin" ON public.company_settings;
+CREATE POLICY "Settings modifiable by owner and admin"
+  ON public.company_settings FOR ALL
+  TO authenticated
+  USING (public.current_user_role() IN ('owner', 'admin'))
+  WITH CHECK (public.current_user_role() IN ('owner', 'admin'));
+
+-- Policies for public.users
+DROP POLICY IF EXISTS "Users viewable by authenticated" ON public.users;
+CREATE POLICY "Users viewable by authenticated"
+  ON public.users FOR SELECT
+  TO authenticated, anon
+  USING (true);
+
+DROP POLICY IF EXISTS "Users self insert" ON public.users;
+CREATE POLICY "Users self insert"
+  ON public.users FOR INSERT
+  TO anon, authenticated
+  WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Users update policy" ON public.users;
+CREATE POLICY "Users update policy"
+  ON public.users FOR UPDATE
+  TO authenticated
+  USING (
+    id = auth.uid()::text 
+    OR lower(email) = lower(auth.jwt()->>'email')
+    OR public.current_user_role() IN ('owner', 'admin')
+  )
+  WITH CHECK (
+    id = auth.uid()::text 
+    OR lower(email) = lower(auth.jwt()->>'email')
+    OR public.current_user_role() IN ('owner', 'admin')
+  );
+
+-- Policies for public.employees
+DROP POLICY IF EXISTS "Employees viewable by authenticated" ON public.employees;
+CREATE POLICY "Employees viewable by authenticated"
+  ON public.employees FOR SELECT
+  TO authenticated
+  USING (true);
+
+DROP POLICY IF EXISTS "Employees modifiable by owner admin hr" ON public.employees;
+CREATE POLICY "Employees modifiable by owner admin hr"
+  ON public.employees FOR ALL
+  TO authenticated
+  USING (public.current_user_role() IN ('owner', 'admin', 'hr'))
+  WITH CHECK (public.current_user_role() IN ('owner', 'admin', 'hr'));
+
+-- Policies for public.payroll_records
+DROP POLICY IF EXISTS "Payroll viewable by authorized or owner of payslip" ON public.payroll_records;
+CREATE POLICY "Payroll viewable by authorized or owner of payslip"
+  ON public.payroll_records FOR SELECT
+  TO authenticated
+  USING (
+    public.current_user_role() IN ('owner', 'admin', 'accountant')
+    OR employee_id = public.current_user_employee_id()
+    OR employee_id IN (SELECT id FROM public.employees WHERE lower(email) = lower(auth.jwt()->>'email'))
+  );
+
+DROP POLICY IF EXISTS "Payroll manageable by owner admin accountant" ON public.payroll_records;
+CREATE POLICY "Payroll manageable by owner admin accountant"
+  ON public.payroll_records FOR ALL
+  TO authenticated
+  USING (public.current_user_role() IN ('owner', 'admin', 'accountant'))
+  WITH CHECK (public.current_user_role() IN ('owner', 'admin', 'accountant'));
+
+-- Policies for public.attendance_records
+DROP POLICY IF EXISTS "Attendance viewable by authorized or own" ON public.attendance_records;
+CREATE POLICY "Attendance viewable by authorized or own"
+  ON public.attendance_records FOR SELECT
+  TO authenticated
+  USING (
+    public.current_user_role() IN ('owner', 'admin', 'hr', 'accountant')
+    OR employee_id = public.current_user_employee_id()
+    OR employee_id IN (SELECT id FROM public.employees WHERE lower(email) = lower(auth.jwt()->>'email'))
+  );
+
+DROP POLICY IF EXISTS "Attendance recordable by authenticated" ON public.attendance_records;
+CREATE POLICY "Attendance recordable by authenticated"
+  ON public.attendance_records FOR INSERT
+  TO authenticated
+  WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Attendance modifiable by owner admin hr" ON public.attendance_records;
+CREATE POLICY "Attendance modifiable by owner admin hr"
+  ON public.attendance_records FOR UPDATE
+  TO authenticated
+  USING (public.current_user_role() IN ('owner', 'admin', 'hr'))
+  WITH CHECK (public.current_user_role() IN ('owner', 'admin', 'hr'));
+
+-- Policies for public.leave_requests
+DROP POLICY IF EXISTS "Leave requests viewable by authorized or own" ON public.leave_requests;
+CREATE POLICY "Leave requests viewable by authorized or own"
+  ON public.leave_requests FOR SELECT
+  TO authenticated
+  USING (
+    public.current_user_role() IN ('owner', 'admin', 'hr')
+    OR employee_id = public.current_user_employee_id()
+    OR employee_id IN (SELECT id FROM public.employees WHERE lower(email) = lower(auth.jwt()->>'email'))
+  );
+
+DROP POLICY IF EXISTS "Leave requests insert by authenticated" ON public.leave_requests;
+CREATE POLICY "Leave requests insert by authenticated"
+  ON public.leave_requests FOR INSERT
+  TO authenticated
+  WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Leave requests reviewable by owner admin hr" ON public.leave_requests;
+CREATE POLICY "Leave requests reviewable by owner admin hr"
+  ON public.leave_requests FOR UPDATE
+  TO authenticated
+  USING (public.current_user_role() IN ('owner', 'admin', 'hr'))
+  WITH CHECK (public.current_user_role() IN ('owner', 'admin', 'hr'));
+
+-- Policies for public.loans
+DROP POLICY IF EXISTS "Loans viewable by authorized or own" ON public.loans;
+CREATE POLICY "Loans viewable by authorized or own"
+  ON public.loans FOR SELECT
+  TO authenticated
+  USING (
+    public.current_user_role() IN ('owner', 'admin', 'accountant')
+    OR employee_id = public.current_user_employee_id()
+    OR employee_id IN (SELECT id FROM public.employees WHERE lower(email) = lower(auth.jwt()->>'email'))
+  );
+
+DROP POLICY IF EXISTS "Loans apply by authenticated" ON public.loans;
+CREATE POLICY "Loans apply by authenticated"
+  ON public.loans FOR INSERT
+  TO authenticated
+  WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Loans manageable by owner admin accountant" ON public.loans;
+CREATE POLICY "Loans manageable by owner admin accountant"
+  ON public.loans FOR UPDATE
+  TO authenticated
+  USING (public.current_user_role() IN ('owner', 'admin', 'accountant'))
+  WITH CHECK (public.current_user_role() IN ('owner', 'admin', 'accountant'));
+
+-- Policies for public.audit_logs
+DROP POLICY IF EXISTS "Audit logs viewable by authorized" ON public.audit_logs;
+CREATE POLICY "Audit logs viewable by authorized"
+  ON public.audit_logs FOR SELECT
+  TO authenticated
+  USING (public.current_user_role() IN ('owner', 'admin', 'accountant'));
+
+DROP POLICY IF EXISTS "Audit logs insert by authenticated" ON public.audit_logs;
+CREATE POLICY "Audit logs insert by authenticated"
+  ON public.audit_logs FOR INSERT
+  TO authenticated
+  WITH CHECK (true);
+
+-- Policies for public.departments
+DROP POLICY IF EXISTS "Departments viewable by authenticated" ON public.departments;
+CREATE POLICY "Departments viewable by authenticated"
+  ON public.departments FOR SELECT
+  TO authenticated, anon
+  USING (true);
+
+DROP POLICY IF EXISTS "Departments manageable by owner admin hr" ON public.departments;
+CREATE POLICY "Departments manageable by owner admin hr"
+  ON public.departments FOR ALL
+  TO authenticated
+  USING (public.current_user_role() IN ('owner', 'admin', 'hr'))
+  WITH CHECK (public.current_user_role() IN ('owner', 'admin', 'hr'));
+
+-- Policies for public.notifications
+DROP POLICY IF EXISTS "Notifications viewable by target or role" ON public.notifications;
+CREATE POLICY "Notifications viewable by target or role"
+  ON public.notifications FOR SELECT
+  TO authenticated
+  USING (
+    target_roles IS NULL
+    OR array_length(target_roles, 1) = 0
+    OR public.current_user_role() = ANY(target_roles)
+    OR target_user_id = auth.uid()::text
+    OR target_employee_id = public.current_user_employee_id()
+  );
+
+DROP POLICY IF EXISTS "Notifications manageable by authenticated" ON public.notifications;
+CREATE POLICY "Notifications manageable by authenticated"
+  ON public.notifications FOR ALL
+  TO authenticated
+  USING (true)
+  WITH CHECK (true);
 
 -- Grant permissions to PostgREST roles (anon, authenticated, service_role)
 GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;

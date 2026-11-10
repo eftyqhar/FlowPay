@@ -160,14 +160,29 @@ export const usePayrollStore = create<PayrollState>((set, get) => ({
       };
     });
 
-    // Sync generated drafts with Supabase
+    // Sync generated drafts with Supabase: purge old drafts for the same period before inserting
     if (records.length > 0) {
-      supabase
-        .from('payroll_records')
-        .insert(records.map(payrollToRow))
-        .then(({ error }) => {
+      const syncDrafts = async () => {
+        try {
+          if (replaceExisting) {
+            const empIdsList = Array.from(targetEmpIds);
+            await supabase
+              .from('payroll_records')
+              .delete()
+              .eq('month', month)
+              .eq('year', year)
+              .eq('status', 'draft')
+              .in('employee_id', empIdsList);
+          }
+          const { error } = await supabase
+            .from('payroll_records')
+            .insert(records.map(payrollToRow));
           if (error) console.error('Failed to sync generated payroll to Supabase:', error);
-        });
+        } catch (err) {
+          console.error('Error syncing generated payroll:', err);
+        }
+      };
+      syncDrafts();
     }
 
     return records;
@@ -187,20 +202,18 @@ export const usePayrollStore = create<PayrollState>((set, get) => ({
       ),
     }));
 
-    // Sync to Supabase
-    ids.forEach((id) => {
-      supabase
-        .from('payroll_records')
-        .update({
-          status: 'approved',
-          approved_by: approvedBy,
-          approved_at: now,
-        })
-        .eq('id', id)
-        .then(({ error }) => {
-          if (error) console.error('Failed to update payroll approval in Supabase:', error);
-        });
-    });
+    // Batched Sync to Supabase in a single atomic update
+    supabase
+      .from('payroll_records')
+      .update({
+        status: 'approved',
+        approved_by: approvedBy,
+        approved_at: now,
+      })
+      .in('id', ids)
+      .then(({ error }) => {
+        if (error) console.error('Failed to update payroll approval in Supabase:', error);
+      });
 
     // Notify each employee
     recordsToApprove.forEach((rec) => {
@@ -259,23 +272,21 @@ export const usePayrollStore = create<PayrollState>((set, get) => ({
       ),
     }));
 
-    // Sync to Supabase
-    ids.forEach((id) => {
-      supabase
-        .from('payroll_records')
-        .update({
-          status: 'paid',
-          paid_by: paidBy,
-          paid_at: now,
-          payment_date: now.split('T')[0],
-          payment_method: paymentMethod,
-          transaction_ref: txRef,
-        })
-        .eq('id', id)
-        .then(({ error }) => {
-          if (error) console.error('Failed to update payroll payment in Supabase:', error);
-        });
-    });
+    // Batched Sync to Supabase in a single atomic update
+    supabase
+      .from('payroll_records')
+      .update({
+        status: 'paid',
+        paid_by: paidBy,
+        paid_at: now,
+        payment_date: now.split('T')[0],
+        payment_method: paymentMethod,
+        transaction_ref: txRef,
+      })
+      .in('id', ids)
+      .then(({ error }) => {
+        if (error) console.error('Failed to update payroll payment in Supabase:', error);
+      });
   },
 
   updatePayrollRecord: (id, updates) => {
@@ -326,6 +337,13 @@ export const usePayrollStore = create<PayrollState>((set, get) => ({
   },
 
   deletePayrollRecord: (id) => {
+    const record = get().payrollRecords.find((r) => r.id === id);
+    if (record && record.loanDeduction && record.loanDeduction > 0) {
+      useLoanStore
+        .getState()
+        .reverseInstallmentDeduction(record.employeeId, record.month, record.year, record.id);
+    }
+
     set((state) => ({
       payrollRecords: state.payrollRecords.filter(
         (record) => record.id !== id || record.status !== 'draft'

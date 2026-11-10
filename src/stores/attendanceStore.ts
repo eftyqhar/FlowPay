@@ -83,14 +83,22 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
   },
 
   bulkRecordAttendance: (records) => {
-    const fullRecords: AttendanceRecord[] = records.map((r) => ({ ...r, id: generateId() }));
-    set((state) => ({
-      attendanceRecords: [...fullRecords, ...state.attendanceRecords],
-    }));
+    const existing = get().attendanceRecords;
+    const fullRecords: AttendanceRecord[] = records.map((r) => {
+      const match = existing.find((e) => e.employeeId === r.employeeId && e.date === r.date);
+      return { ...r, id: match ? match.id : generateId() };
+    });
+
+    const fullRecordIds = new Set(fullRecords.map((r) => r.id));
+    const filteredExisting = existing.filter((r) => !fullRecordIds.has(r.id));
+
+    set({
+      attendanceRecords: [...fullRecords, ...filteredExisting],
+    });
 
     supabase
       .from('attendance_records')
-      .insert(fullRecords.map(attendanceToRow))
+      .upsert(fullRecords.map(attendanceToRow))
       .then(({ error }) => {
         if (error) console.error('Failed to sync bulk attendance to Supabase:', error);
       });

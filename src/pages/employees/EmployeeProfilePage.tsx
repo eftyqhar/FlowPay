@@ -60,6 +60,7 @@ export default function EmployeeProfilePage() {
   const [docModalOpen, setDocModalOpen] = useState(false);
   const [docName, setDocName] = useState('');
   const [docType, setDocType] = useState('Contract');
+  const [selectedDocFile, setSelectedDocFile] = useState<File | null>(null);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const photoInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -217,14 +218,40 @@ export default function EmployeeProfilePage() {
       toast.error('Document name is required');
       return;
     }
-    addDocument(employee.id, {
-      name: docName.trim(),
-      type: docType,
-      size: `${(Math.random() * 2 + 0.5).toFixed(1)} MB`,
-    });
-    setDocName('');
-    setDocModalOpen(false);
-    toast.success('Document uploaded successfully');
+
+    if (selectedDocFile) {
+      const formattedSize =
+        selectedDocFile.size > 1024 * 1024
+          ? `${(selectedDocFile.size / (1024 * 1024)).toFixed(1)} MB`
+          : `${Math.round(selectedDocFile.size / 1024)} KB`;
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        addDocument(employee.id, {
+          name: docName.trim(),
+          type: docType,
+          size: formattedSize,
+          url: reader.result as string,
+        });
+        setSelectedDocFile(null);
+        setDocName('');
+        setDocModalOpen(false);
+        toast.success('Document uploaded successfully');
+      };
+      reader.onerror = () => {
+        toast.error('Failed to read file');
+      };
+      reader.readAsDataURL(selectedDocFile);
+    } else {
+      addDocument(employee.id, {
+        name: docName.trim(),
+        type: docType,
+        size: '1.0 MB',
+      });
+      setDocName('');
+      setDocModalOpen(false);
+      toast.success('Document record added');
+    }
   };
 
   const { grossSalary, totalDeductions, netSalary } = calculateFullSalary(employee);
@@ -668,6 +695,23 @@ export default function EmployeeProfilePage() {
                     </DialogHeader>
                     <form onSubmit={handleAddDocument} className="space-y-4 pt-2">
                       <div className="space-y-2">
+                        <Label htmlFor="docFile">Attach File (PDF, Image, Document)</Label>
+                        <Input
+                          id="docFile"
+                          type="file"
+                          accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx"
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f) {
+                              setSelectedDocFile(f);
+                              if (!docName.trim()) {
+                                setDocName(f.name);
+                              }
+                            }
+                          }}
+                        />
+                      </div>
+                      <div className="space-y-2">
                         <Label htmlFor="docName">Document Title *</Label>
                         <Input
                           id="docName"
@@ -723,7 +767,18 @@ export default function EmployeeProfilePage() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => toast.info(`Simulated download for: ${doc.name}`)}
+                          onClick={() => {
+                            if (doc.url) {
+                              const a = document.createElement('a');
+                              a.href = doc.url;
+                              a.download = doc.name;
+                              document.body.appendChild(a);
+                              a.click();
+                              document.body.removeChild(a);
+                            } else {
+                              toast.info(`Document ${doc.name} attached as metadata reference.`);
+                            }
+                          }}
                         >
                           <Download className="w-4 h-4 mr-1" /> Download
                         </Button>

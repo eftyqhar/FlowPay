@@ -32,6 +32,7 @@ export interface EmployeeDocument {
   type: string;
   uploadDate: string;
   size?: string;
+  url?: string;
 }
 
 export interface EmergencyContact {
