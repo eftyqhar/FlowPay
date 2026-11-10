@@ -21,7 +21,7 @@ export interface DepartmentSalary {
   total: number;
 }
 
-export interface EmployeePayrollInput extends Pick<Employee, 'basicSalary' | 'allowances' | 'bonus' | 'overtime' | 'deductions' | 'tax'> {
+export interface EmployeePayrollInput extends Pick<Employee, 'basicSalary' | 'allowances' | 'bonus' | 'overtime' | 'deductions' | 'tax' | 'houseRentAllowance' | 'medicalAllowance' | 'transportAllowance'> {
   id: string;
   fullName: string;
   department: string;
@@ -137,6 +137,11 @@ export const usePayrollStore = create<PayrollState>((set, get) => ({
         status: 'draft',
         createdBy,
         createdAt: now,
+        breakdown: {
+          houseRent: emp.houseRentAllowance ?? Math.round((emp.allowances || 0) * 0.5),
+          medical: emp.medicalAllowance ?? Math.round((emp.allowances || 0) * 0.3),
+          transport: emp.transportAllowance ?? Math.round((emp.allowances || 0) * 0.2),
+        },
       };
     });
 

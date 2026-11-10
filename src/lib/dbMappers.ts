@@ -30,60 +30,91 @@ export const departmentToRow = (d: Partial<Department>) => ({
 });
 
 // 2. Employee
-export const rowToEmployee = (row: any): Employee => ({
-  id: row.id,
-  employeeId: row.employee_id,
-  fullName: row.full_name,
-  email: row.email,
-  phone: row.phone || '',
-  photo: row.photo || undefined,
-  department: row.department,
-  designation: row.designation,
-  joiningDate: row.joining_date,
-  basicSalary: Number(row.basic_salary) || 0,
-  allowances: Number(row.allowances) || 0,
-  bonus: Number(row.bonus) || 0,
-  overtime: Number(row.overtime) || 0,
-  deductions: Number(row.deductions) || 0,
-  tax: Number(row.tax) || 0,
-  bankInfo: row.bank_info || { bankName: '', accountNumber: '', routingNumber: '', accountType: 'savings' },
-  paymentMethod: row.payment_method || undefined,
-  mobileBankingInfo: row.mobile_banking_info || undefined,
-  status: row.status || 'active',
-  pfEligible: row.pf_eligible ?? true,
-  leaveBalance: row.leave_balance || { casual: 10, sick: 14, annual: 15 },
-  emergencyContact: row.emergency_contact || undefined,
-  documents: row.documents || [],
-  createdAt: row.created_at || new Date().toISOString(),
-  updatedAt: row.updated_at || new Date().toISOString(),
-});
+export const rowToEmployee = (row: any): Employee => {
+  const totalAllowances = Number(row.allowances) || 0;
+  const houseRent =
+    row.house_rent_allowance !== null && row.house_rent_allowance !== undefined
+      ? Number(row.house_rent_allowance)
+      : Math.round(totalAllowances * 0.5);
+  const medical =
+    row.medical_allowance !== null && row.medical_allowance !== undefined
+      ? Number(row.medical_allowance)
+      : Math.round(totalAllowances * 0.3);
+  const transport =
+    row.transport_allowance !== null && row.transport_allowance !== undefined
+      ? Number(row.transport_allowance)
+      : Math.round(totalAllowances * 0.2);
 
-export const employeeToRow = (emp: Partial<Employee>) => ({
-  id: emp.id,
-  employee_id: emp.employeeId,
-  full_name: emp.fullName,
-  email: emp.email,
-  phone: emp.phone ?? '',
-  photo: emp.photo ?? null,
-  department: emp.department,
-  designation: emp.designation,
-  joining_date: emp.joiningDate,
-  basic_salary: emp.basicSalary ?? 0,
-  allowances: emp.allowances ?? 0,
-  bonus: emp.bonus ?? 0,
-  overtime: emp.overtime ?? 0,
-  deductions: emp.deductions ?? 0,
-  tax: emp.tax ?? 0,
-  bank_info: emp.bankInfo ?? null,
-  payment_method: emp.paymentMethod ?? null,
-  mobile_banking_info: emp.mobileBankingInfo ?? null,
-  status: emp.status ?? 'active',
-  pf_eligible: emp.pfEligible ?? true,
-  leave_balance: emp.leaveBalance ?? { casual: 10, sick: 14, annual: 15 },
-  emergency_contact: emp.emergencyContact ?? null,
-  documents: emp.documents ?? [],
-  updated_at: new Date().toISOString(),
-});
+  return {
+    id: row.id,
+    employeeId: row.employee_id,
+    fullName: row.full_name,
+    email: row.email,
+    phone: row.phone || '',
+    photo: row.photo || undefined,
+    department: row.department,
+    designation: row.designation,
+    joiningDate: row.joining_date,
+    basicSalary: Number(row.basic_salary) || 0,
+    allowances: totalAllowances,
+    houseRentAllowance: houseRent,
+    medicalAllowance: medical,
+    transportAllowance: transport,
+    bonus: Number(row.bonus) || 0,
+    overtime: Number(row.overtime) || 0,
+    deductions: Number(row.deductions) || 0,
+    tax: Number(row.tax) || 0,
+    bankInfo: row.bank_info || { bankName: '', accountNumber: '', routingNumber: '', accountType: 'savings' },
+    paymentMethod: row.payment_method || undefined,
+    mobileBankingInfo: row.mobile_banking_info || undefined,
+    status: row.status || 'active',
+    pfEligible: row.pf_eligible ?? true,
+    leaveBalance: row.leave_balance || { casual: 10, sick: 14, annual: 15 },
+    emergencyContact: row.emergency_contact || undefined,
+    documents: row.documents || [],
+    createdAt: row.created_at || new Date().toISOString(),
+    updatedAt: row.updated_at || new Date().toISOString(),
+  };
+};
+
+export const employeeToRow = (emp: Partial<Employee>) => {
+  const houseRent = emp.houseRentAllowance ?? 0;
+  const medical = emp.medicalAllowance ?? 0;
+  const transport = emp.transportAllowance ?? 0;
+  const sumOfAllowances = houseRent + medical + transport;
+  const totalAllowances =
+    sumOfAllowances > 0 ? sumOfAllowances : (emp.allowances ?? 0);
+
+  return {
+    id: emp.id,
+    employee_id: emp.employeeId,
+    full_name: emp.fullName,
+    email: emp.email,
+    phone: emp.phone ?? '',
+    photo: emp.photo ?? null,
+    department: emp.department,
+    designation: emp.designation,
+    joining_date: emp.joiningDate,
+    basic_salary: emp.basicSalary ?? 0,
+    allowances: totalAllowances,
+    house_rent_allowance: houseRent,
+    medical_allowance: medical,
+    transport_allowance: transport,
+    bonus: emp.bonus ?? 0,
+    overtime: emp.overtime ?? 0,
+    deductions: emp.deductions ?? 0,
+    tax: emp.tax ?? 0,
+    bank_info: emp.bankInfo ?? null,
+    payment_method: emp.paymentMethod ?? null,
+    mobile_banking_info: emp.mobileBankingInfo ?? null,
+    status: emp.status ?? 'active',
+    pf_eligible: emp.pfEligible ?? true,
+    leave_balance: emp.leaveBalance ?? { casual: 10, sick: 14, annual: 15 },
+    emergency_contact: emp.emergencyContact ?? null,
+    documents: emp.documents ?? [],
+    updated_at: new Date().toISOString(),
+  };
+};
 
 // 3. Attendance
 export const rowToAttendance = (row: any): AttendanceRecord => ({

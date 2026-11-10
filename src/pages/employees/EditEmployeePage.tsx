@@ -26,7 +26,10 @@ const schema = z.object({
   status: z.enum(['active', 'inactive']),
   paymentMethod: z.enum(['bank_transfer', 'mobile_banking', 'cash', 'check']).default('bank_transfer'),
   basicSalary: z.coerce.number().min(0, 'Must be positive'),
-  allowances: z.coerce.number().min(0, 'Must be positive'),
+  allowances: z.coerce.number().min(0, 'Must be positive').default(0),
+  houseRentAllowance: z.coerce.number().min(0, 'Must be positive').default(0),
+  medicalAllowance: z.coerce.number().min(0, 'Must be positive').default(0),
+  transportAllowance: z.coerce.number().min(0, 'Must be positive').default(0),
   bonus: z.coerce.number().min(0, 'Must be positive'),
   overtime: z.coerce.number().min(0, 'Must be positive'),
   deductions: z.coerce.number().min(0, 'Must be positive'),
@@ -68,6 +71,9 @@ export default function EditEmployeePage() {
       paymentMethod: 'bank_transfer',
       basicSalary: 0,
       allowances: 0,
+      houseRentAllowance: 0,
+      medicalAllowance: 0,
+      transportAllowance: 0,
       bonus: 0,
       overtime: 0,
       deductions: 0,
@@ -88,6 +94,7 @@ export default function EditEmployeePage() {
 
   useEffect(() => {
     if (employee) {
+      const totalAllow = employee.allowances || 0;
       reset({
         fullName: employee.fullName,
         email: employee.email,
@@ -98,7 +105,19 @@ export default function EditEmployeePage() {
         status: employee.status,
         paymentMethod: employee.paymentMethod || 'bank_transfer',
         basicSalary: employee.basicSalary,
-        allowances: employee.allowances,
+        allowances: totalAllow,
+        houseRentAllowance:
+          employee.houseRentAllowance !== undefined && employee.houseRentAllowance !== null
+            ? employee.houseRentAllowance
+            : Math.round(totalAllow * 0.5),
+        medicalAllowance:
+          employee.medicalAllowance !== undefined && employee.medicalAllowance !== null
+            ? employee.medicalAllowance
+            : Math.round(totalAllow * 0.3),
+        transportAllowance:
+          employee.transportAllowance !== undefined && employee.transportAllowance !== null
+            ? employee.transportAllowance
+            : Math.round(totalAllow * 0.2),
         bonus: employee.bonus,
         overtime: employee.overtime,
         deductions: employee.deductions,
@@ -119,15 +138,23 @@ export default function EditEmployeePage() {
   }, [employee, reset]);
 
   const basic = watch('basicSalary') || 0;
-  const allowances = watch('allowances') || 0;
+  const allowancesInput = watch('allowances') || 0;
+  const houseRent = watch('houseRentAllowance') || 0;
+  const medical = watch('medicalAllowance') || 0;
+  const transport = watch('transportAllowance') || 0;
   const bonus = watch('bonus') || 0;
   const overtime = watch('overtime') || 0;
   const deductions = watch('deductions') || 0;
   const tax = watch('tax') || 0;
 
+  const totalAllowances = useMemo(() => {
+    const sumIndividual = Number(houseRent) + Number(medical) + Number(transport);
+    return sumIndividual > 0 ? sumIndividual : Number(allowancesInput);
+  }, [houseRent, medical, transport, allowancesInput]);
+
   const currentGross = useMemo(
-    () => calculateGross(basic, allowances, bonus, overtime),
-    [basic, allowances, bonus, overtime]
+    () => calculateGross(basic, totalAllowances, bonus, overtime),
+    [basic, totalAllowances, bonus, overtime]
   );
   const currentTotalDeductions = useMemo(
     () => calculateTotalDeductions(deductions, tax),
@@ -142,6 +169,10 @@ export default function EditEmployeePage() {
     if (!id) return;
     updateEmployee(id, {
       ...data,
+      allowances: totalAllowances,
+      houseRentAllowance: Number(data.houseRentAllowance) || 0,
+      medicalAllowance: Number(data.medicalAllowance) || 0,
+      transportAllowance: Number(data.transportAllowance) || 0,
       bankInfo: {
         bankName: data.bankInfo?.bankName || 'N/A',
         accountNumber: data.bankInfo?.accountNumber || 'N/A',
@@ -293,8 +324,40 @@ export default function EditEmployeePage() {
               <Input id="basicSalary" type="number" min="0" {...register('basicSalary')} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="allowances">Allowances</Label>
-              <Input id="allowances" type="number" min="0" {...register('allowances')} />
+              <Label htmlFor="houseRentAllowance">House Rent Allowance (BDT ৳)</Label>
+              <Input
+                id="houseRentAllowance"
+                type="number"
+                min="0"
+                placeholder="e.g. 50% of Basic"
+                {...register('houseRentAllowance')}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="medicalAllowance">Medical Allowance (BDT ৳)</Label>
+              <Input
+                id="medicalAllowance"
+                type="number"
+                min="0"
+                placeholder="e.g. 10% of Basic"
+                {...register('medicalAllowance')}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="transportAllowance">Transport Allowance (BDT ৳)</Label>
+              <Input
+                id="transportAllowance"
+                type="number"
+                min="0"
+                placeholder="e.g. Conveyance allowance"
+                {...register('transportAllowance')}
+              />
+            </div>
+            <div className="md:col-span-2 p-3 bg-indigo-50/70 border border-indigo-100 rounded-lg flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 text-xs">
+              <span className="text-slate-600 font-medium">Total Monthly Allowances:</span>
+              <span className="font-bold text-indigo-700 text-sm">
+                House: ৳{houseRent || 0} + Medical: ৳{medical || 0} + Transport: ৳{transport || 0} = {formatCurrency(totalAllowances)}
+              </span>
             </div>
             <div className="space-y-2">
               <Label htmlFor="bonus">Bonus</Label>

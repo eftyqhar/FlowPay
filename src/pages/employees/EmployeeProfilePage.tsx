@@ -529,8 +529,38 @@ export default function EmployeeProfilePage() {
                       <span className="text-slate-600">Basic Salary</span>
                       <CurrencyDisplay amount={employee.basicSalary} />
                     </div>
-                    <div className="flex justify-between px-2 text-sm">
-                      <span className="text-slate-600">House Rent & Medical Allowances</span>
+                    <div className="flex justify-between px-2 text-xs text-slate-500 pl-4">
+                      <span>• House Rent Allowance</span>
+                      <CurrencyDisplay
+                        amount={
+                          employee.houseRentAllowance !== undefined && employee.houseRentAllowance !== null
+                            ? employee.houseRentAllowance
+                            : Math.round(employee.allowances * 0.5)
+                        }
+                      />
+                    </div>
+                    <div className="flex justify-between px-2 text-xs text-slate-500 pl-4">
+                      <span>• Medical Allowance</span>
+                      <CurrencyDisplay
+                        amount={
+                          employee.medicalAllowance !== undefined && employee.medicalAllowance !== null
+                            ? employee.medicalAllowance
+                            : Math.round(employee.allowances * 0.3)
+                        }
+                      />
+                    </div>
+                    <div className="flex justify-between px-2 text-xs text-slate-500 pl-4">
+                      <span>• Transport Allowance</span>
+                      <CurrencyDisplay
+                        amount={
+                          employee.transportAllowance !== undefined && employee.transportAllowance !== null
+                            ? employee.transportAllowance
+                            : Math.round(employee.allowances * 0.2)
+                        }
+                      />
+                    </div>
+                    <div className="flex justify-between px-2 text-sm font-medium text-slate-800">
+                      <span>Total Allowances</span>
                       <CurrencyDisplay amount={employee.allowances} />
                     </div>
                     <div className="flex justify-between px-2 pt-2 border-t font-semibold text-sm">

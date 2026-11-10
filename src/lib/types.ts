@@ -59,6 +59,9 @@ export interface Employee {
   joiningDate: string;
   basicSalary: number;
   allowances: number;
+  houseRentAllowance?: number;
+  medicalAllowance?: number;
+  transportAllowance?: number;
   bonus: number;
   overtime: number;
   deductions: number;
