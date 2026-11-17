@@ -1,518 +1,814 @@
-# 📘 FlowPay Enterprise — Comprehensive System Documentation
+# FlowPay Enterprise — Comprehensive Technical Architecture & System Documentation
 
-> **Version:** 2.0.0  
-> **Status:** Production-Ready  
-> **Architecture:** Client-Side Single Page Application (React 18 + TypeScript + Vite + Zustand)  
-> **Author:** FlowPay Core Engineering Team  
+FlowPay is an enterprise-grade Payroll, Compensation, and Workforce Management System built with a modern React, TypeScript, and Supabase PostgreSQL architecture. This document provides an exhaustive, function-by-function reference of the system's architecture, data flows, financial calculation engine, state management stores, user interface pages, security model, and technology stack.
 
 ---
 
-## 📑 Table of Contents
+## Table of Contents
 
-1. [Executive Summary & Architecture](#1-executive-summary--architecture)
-2. [Technology Stack](#2-technology-stack)
-3. [Project Directory & File Map](#3-project-directory--file-map)
-4. [Role-Based Access Control (RBAC) Matrix](#4-role-based-access-control-rbac-matrix)
-5. [Core Functional Modules Deep Dive](#5-core-functional-modules-deep-dive)
-   - [5.1 Financial Overview Dashboard](#51-financial-overview-dashboard)
-   - [5.2 Employee Lifecycle Management](#52-employee-lifecycle-management)
-   - [5.3 Attendance & Leave Tracking System](#53-attendance--leave-tracking-system)
-   - [5.4 Loan & Salary Advance Management](#54-loan--salary-advance-management)
-   - [5.5 Enterprise Payroll Calculation Engine](#55-enterprise-payroll-calculation-engine)
-   - [5.6 Interactive Payslips & PDF Generation](#56-interactive-payslips--pdf-generation)
-   - [5.7 Financial & Tax Reports](#57-financial--tax-reports)
-   - [5.8 Role-Isolated Notification System](#58-role-isolated-notification-system)
-   - [5.9 Audit Trail & System Security Logs](#59-audit-trail--system-security-logs)
-   - [5.10 System Settings & Customization](#510-system-settings--customization)
-6. [Mathematical Formulations & Payroll Algorithms](#6-mathematical-formulations--payroll-algorithms)
-7. [State Architecture & Data Persistence](#7-state-architecture--data-persistence)
-8. [Deployment & Infrastructure Guide](#8-deployment--infrastructure-guide)
-9. [Developer Guide & Local Setup](#9-developer-guide--local-setup)
-10. [Troubleshooting & Frequently Asked Questions](#10-troubleshooting--frequently-asked-questions)
+1. [Executive Overview & Business Purpose](#1-executive-overview--business-purpose)
+2. [Technology Stack & Dependencies](#2-technology-stack--dependencies)
+3. [System Architecture & Core Patterns](#3-system-architecture--core-patterns)
+4. [Database Architecture & Schema Specification](#4-database-architecture--schema-specification)
+5. [State Management Layer (Zustand Stores)](#5-state-management-layer-zustand-stores)
+   - [5.1 `authStore.ts`](#51-authstorets)
+   - [5.2 `employeeStore.ts`](#52-employeestorets)
+   - [5.3 `attendanceStore.ts`](#53-attendancestorets)
+   - [5.4 `payrollStore.ts`](#54-payrollstorets)
+   - [5.5 `loanStore.ts`](#55-loanstorets)
+   - [5.6 `departmentStore.ts`](#56-departmentstorets)
+   - [5.7 `settingsStore.ts`](#57-settingsstorets)
+   - [5.8 `notificationStore.ts`](#58-notificationstorets)
+   - [5.9 `auditStore.ts`](#59-auditstorets)
+6. [Salary & Financial Calculation Engine (`src/lib/salary.ts`)](#6-salary--financial-calculation-engine-srclibsalaryts)
+7. [Page-by-Page Functional & Architectural Breakdown](#7-page-by-page-functional--architectural-breakdown)
+   - [7.1 Authentication (`LoginPage.tsx`)](#71-authentication-loginpagetsx)
+   - [7.2 Executive Dashboard (`DashboardPage.tsx`)](#72-executive-dashboard-dashboardpagetsx)
+   - [7.3 Employee Management Module](#73-employee-management-module)
+   - [7.4 Attendance & Leave Management (`AttendancePage.tsx`)](#74-attendance--leave-management-attendancepagetsx)
+   - [7.5 Payroll Management Module](#75-payroll-management-module)
+   - [7.6 Payslip Center (`AllPayslipsPage.tsx`)](#76-payslip-center-allpayslipspagetsx)
+   - [7.7 Loans & Salary Advances (`LoansPage.tsx`)](#77-loans--salary-advances-loanspagetsx)
+   - [7.8 Analytics & Reporting Modules](#78-analytics--reporting-modules)
+   - [7.9 System Settings & Administration](#79-system-settings--administration)
+   - [7.10 User Profile (`ProfilePage.tsx`)](#710-user-profile-profilepagetsx)
+8. [Role-Based Access Control (RBAC) & Security Architecture](#8-role-based-access-control-rbac--security-architecture)
+9. [Utilities, Mappers, and Helper Modules](#9-utilities-mappers-and-helper-modules)
+10. [Automated Test Suites & QA Verification](#10-automated-test-suites--qa-verification)
+11. [Deployment, Environment & Operational Guide](#11-deployment-environment--operational-guide)
 
 ---
 
-## 1. Executive Summary & Architecture
+## 1. Executive Overview & Business Purpose
 
-**FlowPay** is a high-performance, enterprise-grade Salary & Payroll Management platform built specifically for modern companies, human resource departments, accountants, and business owners. It automates employee lifecycle management, complex payroll calculations, daily attendance with automatic absent deductions, company loans and salary advances, printable payslip generation, and comprehensive financial reporting.
+FlowPay is engineered to automate and govern the entire payroll and human resource lifecycle for modern enterprises, with native support for Bangladesh labor standards (currency in BDT `৳`, standard 22-day working cycles, overtime rates, and statutory Provident Fund contributions), as well as multi-currency flexibility for international organizations.
 
-### System Architecture Diagram
+### Key Capabilities:
+- **Employee Lifecycle Governance**: Onboarding, profile management, granular allowance breakdowns (House Rent, Medical, Transport), banking, and mobile financial services (bKash, Nagad, Rocket).
+- **Time & Attendance Tracking**: Daily check-in/out logging with 24-hour precision, automated late check-in detection, early check-out detection, daily absence synthesis, and manual HR audit correction.
+- **Leave Application & Approval Workflow**: Multi-tier leave requests (Casual, Sick, Annual, Unpaid), automated balance tracking, and salary deduction synchronization.
+- **Salary Advances & Employee Loans**: Flexible disbursement, monthly installment deduction from payroll, early settlement, and deduction reversals.
+- **Deterministic Payroll Calculation Engine**: Precision gross and net calculation, overtime pay computation based on daily working hours, absence penalty deduction, festival bonus automation, and tax slab management.
+- **Disbursement & Payment Reconciliation**: Batch payroll approval, multi-channel payment disbursement (Bank Transfer, Mobile Banking, Cash, Check), transaction reference logging, and PDF payslip generation.
+- **Enterprise Security & Audit**: Fine-grained Role-Based Access Control (RBAC), immutable audit trail logging, and Supabase PostgreSQL Row-Level Security (RLS).
+- **Adaptive Responsive Design**: Desktop widescreen layout and a touch-friendly mobile card experience with sliding drawer navigation.
+
+---
+
+## 2. Technology Stack & Dependencies
 
 ```mermaid
 flowchart TD
-    subgraph UI_Layer["Presentation Layer (React 18 + Tailwind CSS)"]
-        A[Dashboard & Analytics]
-        B[Employee Directory & Profile]
-        C[Attendance & Leave Portal]
-        D[Loan & Advance Ledger]
-        E[Payroll Generator & History]
-        F[Financial Reports & Tax]
-        G[Company Settings & Audit Logs]
+    subgraph Frontend_Client ["Frontend Client (React 18 + TypeScript 5)"]
+        UI["UI Layer: Tailwind CSS + Radix UI Primitives + Lucide Icons"]
+        Router["Routing: React Router DOM v6"]
+        State["State Management: Zustand Stores (Optimistic UI)"]
+        Charts["Analytics & Charts: Recharts"]
+        Export["Document Generation: jsPDF + html2canvas + SheetJS (XLSX)"]
+        Forms["Validation & Forms: React Hook Form + Zod"]
+        Toast["Notifications: Sonner Toast Engine"]
     end
 
-    subgraph State_Layer["Reactive State Stores (Zustand)"]
-        S1[authStore]
-        S2[employeeStore]
-        S3[attendanceStore]
-        S4[loanStore]
-        S5[payrollStore]
-        S6[settingsStore]
-        S7[notificationStore]
-        S8[auditStore]
+    subgraph Backend_Cloud ["Backend as a Service & Database (Supabase)"]
+        Auth["Supabase Authentication (JWT & Sessions)"]
+        Postgres[("PostgreSQL 15 Database")]
+        RLS["Row-Level Security Policies & Triggers"]
+        Storage["Supabase Storage (Employee Documents & Avatars)"]
     end
 
-    subgraph Core_Engine["Core Calculation & Utilities Engine"]
-        E1[Salary Formulas Engine]
-        E2[Date Interval Overlap Engine]
-        E3[Monotonic ID Generator]
-        E4[Client-side PDF & Excel Exporters]
-    end
-
-    subgraph Storage_Layer["Persistent Local Data Layer"]
-        DB[(Browser LocalStorage - Zustand Persist)]
-        SEED[(Auto-Initialized Seed Dataset)]
-    end
-
-    UI_Layer --> State_Layer
-    State_Layer --> Core_Engine
-    State_Layer <--> Storage_Layer
+    UI --> State
+    State --> Router
+    State <--> |"@supabase/supabase-js"| Backend_Cloud
+    Charts --> UI
+    Export --> UI
 ```
 
----
+### Core Stack Breakdown:
 
-## 2. Technology Stack
-
-| Layer | Technology | Version | Purpose |
+| Category | Technology | Version | Purpose |
 | :--- | :--- | :--- | :--- |
-| **Frontend Framework** | React | `^18.3.1` | Declarative component UI architecture |
-| **Language** | TypeScript | `^5.5.3` | Type-safe development with zero compiler errors |
-| **Build & Tooling** | Vite | `^5.4.21` | Sub-second HMR development and fast Rollup builds |
-| **Styling & Design** | Tailwind CSS | `^3.4.1` | Responsive utility-first UI styling with custom design tokens |
-| **UI Components** | Radix UI / shadcn | Latest | Accessible, unstyled primitive dialogs, popovers, tabs |
-| **Icons** | Lucide React | `^0.400.0` | Crisp modern vector iconography |
-| **Data Visualization** | Recharts | `^2.12.7` | SVG-based responsive financial trend charts |
-| **State Management** | Zustand | `^4.5.4` | Lightweight reactive stores with `persist` middleware |
-| **Forms & Validation** | React Hook Form + Zod | `^7.52.0` / `^3.23.8` | Schema-driven form validation and error handling |
-| **PDF Generation** | jsPDF + html2canvas | `^2.5.2` / `^1.4.1` | Client-side vector and canvas PDF compilation |
-| **Excel Export** | SheetJS (xlsx) | `^0.18.5` | Native `.xlsx` spreadsheet generator |
-| **Toast Notifications**| Sonner | `^1.5.0` | Elegant dismissable status toasts |
+| **Framework** | React | `^18.3.1` | Declarative UI rendering, hooks, component architecture |
+| **Language** | TypeScript | `^5.5.0` | Strict static typing, interfaces, and compile-time correctness |
+| **Bundler & Tooling** | Vite | `^5.3.2` | Fast HMR dev server and optimized Rollup production bundling |
+| **Styling** | Tailwind CSS | `^3.4.4` | Utility-first responsive CSS, custom animations (`tailwindcss-animate`) |
+| **UI Primitives** | Radix UI | Latest | Accessible unstyled primitives (Dialog, Select, Tabs, Dropdown) |
+| **State Management**| Zustand | `^4.5.4` | Lightweight, scalable decentralized state with zero boilerplate |
+| **Database** | PostgreSQL on Supabase | 15.x | Relational storage, unique constraints, foreign keys, triggers |
+| **Backend & Auth** | Supabase JS | `^2.119.0` | Client-side PostgreSQL interface, session management, and RLS |
+| **Charts** | Recharts | `^2.12.7` | Responsive SVG area, bar, and pie charts |
+| **Excel Export** | SheetJS (`xlsx`) | `^0.18.5` | Client-side spreadsheet generation (`.csv` and `.xlsx`) |
+| **PDF Generation** | jsPDF + html2canvas | `^2.5.2` | DOM rasterization and vector PDF payslip rendering |
+| **Icons** | Lucide React | `^0.400.0` | Consistent, accessible iconography |
+| **Test Runner** | tsx | `^4.23.15` | Native TypeScript test runner for unit and audit tests |
 
 ---
 
-## 3. Project Directory & File Map
+## 3. System Architecture & Core Patterns
 
-```text
-FlowPay/
-├── public/                      # Static assets, logos, and manifest
-│   ├── favicon.svg
-│   └── logo.svg
-├── src/
-│   ├── components/
-│   │   ├── auth/                # ProtectedRoute and permission gates
-│   │   ├── layout/              # Sidebar, Header, Breadcrumbs, MainLayout
-│   │   ├── payslip/             # Payslip printable templates (Standard & Compact)
-│   │   ├── shared/              # StatCard, PageHeader, StatusBadge, CurrencyDisplay
-│   │   └── ui/                  # Radix UI wrapper primitives (Button, Dialog, Select, etc.)
-│   ├── lib/
-│   │   ├── constants.ts         # System constants, status badges, bank lists
-│   │   ├── export.ts            # Excel (.xlsx) & CSV report generators
-│   │   ├── salary.ts            # Mathematical payroll & overtime calculation engine
-│   │   ├── seedData.ts          # Comprehensive demo dataset (~25 employees, 6 mo history)
-│   │   ├── types.ts             # Global TypeScript type definitions and interfaces
-│   │   └── utils.ts             # Currency, date, ID generation, and string helpers
-│   ├── pages/
-│   │   ├── attendance/          # Daily attendance, leave applications & approvals
-│   │   ├── auth/                # Login page with 1-click role switcher
-│   │   ├── dashboard/           # Financial KPI overview and trend charts
-│   │   ├── employees/           # Directory, Add/Edit profile, Departments
-│   │   ├── loans/               # Personal loans, Salary advances, Repayment ledger
-│   │   ├── payroll/             # Payroll draft generator, Review, History, Details
-│   │   ├── payslips/            # Employee payslip directory & print views
-│   │   ├── profile/             # Authenticated user personal profile
-│   │   ├── reports/             # Salary, Department, Payment Method, Yearly reports
-│   │   └── settings/            # Company settings, Roles, Salary rules, Audit logs
-│   ├── stores/
-│   │   ├── attendanceStore.ts   # Check-in/out records, leave requests, approval state
-│   │   ├── auditStore.ts        # Immutable activity log with 500-record ring buffer
-│   │   ├── authStore.ts         # User authentication, credentials, and session state
-│   │   ├── departmentStore.ts   # Department definitions and head allocations
-│   │   ├── employeeStore.ts     # Employee records, monotonic IDs, bank details
-│   │   ├── loanStore.ts         # Loans, salary advances, automated payroll deduction
-│   │   ├── notificationStore.ts # Role-isolated targeted notification queue
-│   │   ├── payrollStore.ts      # Monthly payroll records, draft-to-paid lifecycle
-│   │   └── settingsStore.ts     # Working days, tax slabs, company profile, deduction toggles
-│   ├── App.tsx                  # Client router, protected routes, layout wraps
-│   ├── index.css                # Tailwind imports and base typography
-│   └── main.tsx                 # DOM entry point
-├── vercel.json                  # Vercel SPA routing and build configuration
-├── package.json                 # Project dependencies and script definitions
-├── tsconfig.json                # TypeScript compiler configuration
-└── vite.config.ts               # Vite build settings and path aliases
-```
-
----
-
-## 4. Role-Based Access Control (RBAC) Matrix
-
-FlowPay enforces strict multi-role permission boundaries. The system includes 5 standard organizational roles:
-
-| Module / Feature | Owner | Admin | Accountant | HR Manager | Employee |
-| :--- | :---: | :---: | :---: | :---: | :---: |
-| **Financial Dashboard** | Full Access | Full Access | Full Access | Headcount Only | Personal Only |
-| **Employee Directory** | Create/Edit/Delete | Create/Edit/Delete | View Only | Create/Edit | Directory View |
-| **Salary Structure Setup** | Full Control | Full Control | View Only | View / Edit Basic | Hidden |
-| **Attendance Check-in** | Global Audit | Global Audit | View Attendance | Global Audit | Self Check-in/out |
-| **Leave Approval** | Approve/Reject | Approve/Reject | View Only | Approve/Reject | Apply Only |
-| **Payroll Generation** | Full Access | Full Access | Review & Pay | View Only | Forbidden |
-| **Payment Disbursement** | Execute | Execute | Execute | View Only | Forbidden |
-| **Loan Approval** | Approve/Reject | Approve/Reject | Approve/Settle | View Applications | Apply Only |
-| **Payslip Access** | All Employees | All Employees | All Employees | All Employees | Self Only |
-| **Company Settings** | Full Access | View Only | View Only | View Only | Forbidden |
-| **Audit Logs** | Full Access | View Only | View Only | View Only | Forbidden |
-
-### Pre-Configured Demo Accounts (1-Click Login)
-
-The login screen features instant 1-click login buttons for testing each persona:
-
-```text
-👑 Owner:       owner@flowpay.com       / password123 (Shortcut: "owner")
-🛡️ Admin:       admin@flowpay.com       / password123 (Shortcut: "admin")
-💰 Accountant:  accountant@flowpay.com  / password123 (Shortcut: "accountant")
-📋 HR Manager:  hr@flowpay.com          / password123 (Shortcut: "hr")
-👤 Employee:    employee@flowpay.com    / password123 (Shortcut: "employee")
-```
-
----
-
-## 5. Core Functional Modules Deep Dive
-
-### 5.1 Financial Overview Dashboard
-- **Real-Time KPIs**: Dynamically computed aggregates displaying:
-  - *Total Active Employees*
-  - *Total Monthly Payroll Liability*
-  - *Disbursed (Paid) Amount*
-  - *Pending / Draft Liability*
-- **Expenditure Trend Chart**: Recharts-powered interactive multi-month graph comparing gross salary payouts over time.
-- **Department Cost Distribution**: Bar and pie visualizations showing cost-center weightings across Engineering, Marketing, Sales, HR, etc.
-- **Payout Progress Bar**: Visual percentage completion of the selected month's payroll disbursements.
-- **Audit Stream**: Timestamped live feed of system activities (approvals, edits, logins).
-- **Time Filter**: Dynamic dropdown allowing historical data exploration across any month and year.
-
-### 5.2 Employee Lifecycle Management
-- **Monotonic ID Generator (`EMP-xxx`)**: Uses a regex-based monotonic allocation algorithm (`max(existing IDs) + 1`). Even if an intermediate employee is deleted, IDs never collide.
-- **Comprehensive Profiles**:
-  - Personal Information (Full name, email, phone, NID/SSN, joining date).
-  - Organizational details (Department, designation, employment type: Full-time / Part-time / Contract).
-  - Salary Breakdown (Basic salary, medical, house rent, conveyance, bonus).
-- **Dual Payment Channel Support**:
-  - **Traditional Bank Transfer**: Bank name, Branch, Account holder name, Account number, Routing number.
-  - **Mobile Financial Services (MFS)**: Dedicated support for **bKash**, **Nagad**, **Rocket**, and **Upay**, with Account Type (`Personal` vs `Agent`) and Phone Number validation.
-- **Document Vault**: Upload and manage employment contracts, IDs, and certificates.
-- **Leave Balance Ledger**: Tracks Annual, Sick, and Casual leave quotas with automated balance deduction.
-
-### 5.3 Attendance & Leave Tracking System
-- **Employee Self-Check-in / Check-out**: One-click daily punch in/out with automated work hours calculation.
-- **Leave Application Workflow**:
-  - Employee selects leave type (`Casual`, `Sick`, `Annual`, `Unpaid`), date range, and justification.
-  - **Multi-Month Date Overlap Calculation**: If a leave period crosses month boundaries (e.g., Oct 28 to Nov 3), the system accurately allocates the respective days to October and November without double-deduction.
-- **HR Correction Modal**: Allows administrators to adjust check-in/out stamps and annotate audit reasons.
-- **Automatic Absent Day Deduction**:
-  When enabled in Company Settings, unapproved absent days or unpaid leave automatically compute a daily deduction based on monthly working days and subtract it from the net salary.
-
-### 5.4 Loan & Salary Advance Management
-FlowPay provides a formal facility for employee financial assistance, divided into two distinct workflows:
-
-```mermaid
-graph TD
-    A[Employee / Admin Submits Application] --> B{Facility Type}
-    B -->|Salary Advance| C[Short-Term: 1-3 Months Recovery]
-    B -->|Personal Loan| D[Long-Term: 3-36 Months Recovery]
-    C --> E[Real-Time Installment Computation: Principal / Term]
-    D --> E
-    E --> F[Duplicate Pending Check & Active Balance Warning]
-    F --> G[Submit to Approval Queue]
-    G --> H{Admin / Finance Decision}
-    H -->|Approve| I[Active Status: Queued for Automated Payroll Deduction]
-    H -->|Reject| J[Rejected Status: Notification Dispatched to Employee]
-    I --> K[Monthly Payroll Run: Installment Deducted Automatically]
-    K --> L{Remaining Balance <= 0?}
-    L -->|No| K
-    L -->|Yes| M[Marked Completed & Closed]
-```
-
-- **Salary Advance**: Short-term emergency credit against upcoming payroll (1 to 3 months tenure, recommended up to 100% of basic salary).
-- **Personal Company Loan**: Medium/long-term zero-interest company loans (3 to 36 months tenure).
-- **Automated Payroll Deduction Engine**: Whenever monthly payroll is disbursed (`markAsPaid`), active loans automatically record repayments and decrement the principal balance.
-- **Repayment Schedule Ledger**: Full historical ledger recording every monthly payroll deduction with date, amount, and payroll transaction ID.
-- **Early Settlement**: Administrators can settle remaining balances early with one click.
-- **Employee Portal View**: Employees see dedicated KPI cards with their outstanding balance, monthly deduction, eligible advance limit, and status.
-
-### 5.5 Enterprise Payroll Calculation Engine
-FlowPay eliminates manual payroll spreadsheet errors by executing an automated multi-stage calculation pipeline:
+FlowPay employs a **Client-Side Single-Page Application (SPA)** architecture paired with a **Backend-as-a-Service (BaaS)** persistence layer.
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Admin as Finance / HR Admin
-    participant Gen as Payroll Generator
-    participant Store as Employee & Loan Store
-    participant Engine as Salary Calculation Engine
-    participant Pay as Payroll Record Store
+    actor User as User / Admin
+    participant UI as React Page Component
+    participant Store as Zustand Store
+    participant Mapper as DB Mapper (dbMappers.ts)
+    participant Supabase as Supabase PostgreSQL
 
-    Admin->>Gen: Select Month, Year & Employees
-    Gen->>Store: Fetch Employee Salaries & Active Loans
-    Gen->>Store: Fetch Month's Attendance & Unpaid Leaves
-    Gen->>Engine: Calculate Gross, Overtime, Absent Days, Deductions
-    Engine-->>Gen: Computed Salary Structs
-    Gen->>Pay: Save Draft Payroll Records
-    Admin->>Pay: Review & Click "Approve Selected"
-    Pay-->>Admin: Status -> Approved
-    Admin->>Pay: Click "Disburse (Mark as Paid)"
-    Pay->>Store: Decrement Active Loan Installments
-    Pay-->>Admin: Status -> Paid + Generate Txn References
+    User->>UI: Action (e.g. Generate Payroll, Clock In, Apply Leave)
+    UI->>Store: Invoke Action (e.g. generatePayroll, checkIn)
+    Note over Store: 1. Optimistic Update:<br/>Update in-memory state instantly
+    Store-->>UI: State updated (UI re-renders immediately)
+    Store->>Mapper: Transform CamelCase Model -> Snake_case Row
+    Store->>Supabase: Async API Call (insert/update/delete)
+    Supabase-->>Store: Response / Confirmation
+    opt If Error occurs
+        Store->>UI: Display Sonner error toast & rollback if needed
+    end
 ```
 
-- **Collision & Duplicate Prevention**: The payroll generator checks if an employee already has an approved or paid payroll record for that period and disables duplicate processing.
-- **Multi-Method Disbursement**: Supports Bank Transfer, bKash, Nagad, Rocket, Cash, and Cheque with transaction reference logging.
+### Architectural Tenets:
 
-### 5.6 Interactive Payslips & PDF Generation
-- **Printable Templates**: Pixel-perfect payslip format featuring company identity, employee designation, detailed earnings, deductions, bank information, and authorized signatures.
-- **Client-Side High-Fidelity PDF Export**: Powered by `html2canvas` and `jsPDF`, compiling vector-clean, print-ready PDF documents without server latency.
-- **Bulk Printing**: Download or print payslips for individual employees or batch-print entire departments.
-
-### 5.7 Financial & Tax Reports
-- **Salary Report**: Complete breakdown of Basic, Allowances, Gross, Deductions, Tax, and Net salaries.
-- **Department Cost Center**: Headcount, average salary, and gross liabilities per organizational unit.
-- **Payment Reconciliation Report**: Tabulated breakdown of disbursements separated by Bank Transfer, Mobile Banking (bKash/Nagad), Cash, and Checks.
-- **Yearly Executive Summary**: 12-month aggregated trends, quarter-by-quarter expenditure, and year-over-year analytics.
-- **Export Formats**: Instant download in native **Microsoft Excel (`.xlsx`)** and **CSV**.
-
-### 5.8 Role-Isolated Notification System
-- **Role Isolation Defense**: Solves the common bug where administrative notifications appear in standard employee accounts.
-  - Notifications are tagged with `targetRoles` (`admin`, `owner`, `accountant`, `hr`, `employee`), `targetUserId`, or `targetEmployeeId`.
-  - Ordinary employees **only** receive notifications regarding their personal leaves, loans, and payslip publications.
-  - Administrative approval requests remain exclusive to authorized personnel.
-- **Event-Driven Triggers**:
-  - Employee applies for leave or loan $\rightarrow$ Admins/HR notified.
-  - Admin approves/rejects leave or loan $\rightarrow$ Employee notified.
-  - Payroll is approved or disbursed $\rightarrow$ Employee receives payslip notification.
-
-### 5.9 Audit Trail & System Security Logs
-- **Immutable Activity Journal**: Every security-sensitive event (login, employee modification, payroll draft, approval, disbursement, loan settlement) is logged with User ID, Name, Action, Module, Timestamp, and Details.
-- **Ring-Buffer LocalStorage Defense**: Automatically caps stored audit entries at 500 items via FIFO eviction, ensuring browser LocalStorage never exceeds its 5MB quota.
-
-### 5.10 System Settings & Customization
-- **Company Branding**: Organization name, address, tax registration number, logo, and currency symbol (`৳`, `$`, `€`, `£`).
-- **Payroll Parameters**: Monthly default working days (default: 22 days), daily work hours (8 hours), overtime multiplier (1.5x or 2.0x).
-- **Deduction Controls**: Toggle automatic absent day deductions and configurable tax brackets.
+1. **Optimistic UI with Background Synchronization**:
+   Every state modification (e.g., clocking in, approving leaves, updating settings) updates the in-memory Zustand store immediately so the interface feels instantaneous. Simultaneously, a mapped asynchronous query is dispatched to Supabase PostgreSQL.
+2. **Data Transfer Object (DTO) Mapper Pattern (`dbMappers.ts`)**:
+   PostgreSQL uses standard `snake_case` naming (e.g., `employee_id`, `basic_salary`), while the frontend uses idiomatic TypeScript `camelCase` (e.g., `employeeId`, `basicSalary`). Bidirectional mapper functions ensure clean separation between the database schema and application domain models.
+3. **Decentralized Multi-Store Architecture**:
+   State is separated by domain boundaries into independent Zustand stores (`authStore`, `employeeStore`, `attendanceStore`, `payrollStore`, `loanStore`, `departmentStore`, `settingsStore`, `notificationStore`, and `auditStore`). Stores interact through exported getter methods (`useStore.getState()`) to avoid circular dependency deadlocks.
+4. **Deterministic Calculation Engine**:
+   Financial logic is decoupled from UI components and isolated in pure functions inside `src/lib/salary.ts`. This allows 100% test coverage and eliminates double-deduction risks.
+5. **Fail-Closed Security & Access Boundaries**:
+   If an authenticated user's linked employee profile cannot be verified, self-service portals (Payslips, Attendance, Loans) fail closed with clear warnings instead of exposing unauthorized or incorrect corporate data.
 
 ---
 
-## 6. Mathematical Formulations & Payroll Algorithms
+## 4. Database Architecture & Schema Specification
 
-FlowPay implements strict, mathematically sound financial formulas to prevent rounding drift, division by zero, and negative values.
-
-### 6.1 Basic Salary Components
-
-$$\text{Gross Salary} = \text{Basic Salary} + \text{House Rent} + \text{Medical} + \text{Conveyance} + \text{Bonus} + \text{Overtime Pay}$$
-
-$$\text{Total Deductions} = \text{Standard Deductions} + \text{Tax Withholding} + \text{Unpaid Leave Deduction} + \text{Loan Installment}$$
-
-$$\text{Net Salary} = \max(0, \text{Gross Salary} - \text{Total Deductions})$$
-
-### 6.2 Overtime Calculation
-
-$$\text{Hourly Rate} = \frac{\text{Basic Salary}}{\text{Working Days} \times \text{Daily Hours}}$$
-
-$$\text{Overtime Pay} = \text{round}\left(\text{Hourly Rate} \times \text{Overtime Hours} \times \text{Overtime Multiplier}\right)$$
-
-> **Safeguard:** If $\text{Working Days} \le 0$ or is non-finite, $\text{Working Days}$ defaults to $22$.
-
-### 6.3 Absent Day / Unpaid Leave Deduction
-
-$$\text{Daily Wage Rate} = \frac{\text{Basic Salary}}{\text{Safe Working Days}}$$
-
-$$\text{Absent Deduction} = \text{round}\left(\text{Daily Wage Rate} \times \text{Unpaid Leave Days}\right)$$
-
-### 6.4 Loan Installment & Balance
-
-$$\text{Scheduled Monthly Installment} = \text{round}\left(\frac{\text{Principal Amount}}{\text{Term Months}}\right)$$
-
-$$\text{Actual Installment Deducted} = \min\left(\text{Scheduled Installment}, \text{Remaining Balance}\right)$$
-
-$$\text{New Balance} = \max\left(0, \text{Remaining Balance} - \text{Actual Installment Deducted}\right)$$
-
----
-
-## 7. State Architecture & Data Persistence
-
-FlowPay uses **Zustand** stores combined with the `persist` middleware. All state transitions are synchronous and reactive:
+FlowPay's database resides in PostgreSQL on Supabase (`aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres`) under the `public` schema.
 
 ```mermaid
-classDiagram
-    class AuthStore {
-        +User currentUser
-        +User[] users
-        +login(email, pass)
-        +logout()
-    }
-    class EmployeeStore {
-        +Employee[] employees
-        +addEmployee(data)
-        +updateEmployee(id, data)
-        +getNextEmployeeId()
-    }
-    class PayrollStore {
-        +PayrollRecord[] payrollRecords
-        +generatePayroll(month, year, empIds)
-        +approvePayroll(ids, approver)
-        +markAsPaid(ids, payer, method, ref)
-    }
-    class AttendanceStore {
-        +AttendanceRecord[] attendanceRecords
-        +LeaveRequest[] leaveRequests
-        +checkIn(empId)
-        +checkOut(empId)
-        +applyLeave(data)
-        +approveLeave(id, approver)
-    }
-    class LoanStore {
-        +LoanRecord[] loans
-        +applyLoan(data)
-        +approveLoan(id, approver)
-        +recordInstallmentDeduction(empId, m, y, ref)
-        +settleEarly(id)
-    }
-    class NotificationStore {
-        +NotificationItem[] notifications
-        +getUserNotifications(user, empId)
-        +getUnreadCount(user, empId)
-        +markAllAsRead(user, empId)
-    }
+erDiagram
+    USERS ||--o| EMPLOYEES : "links to employee_id"
+    DEPARTMENTS ||--o{ EMPLOYEES : "categorizes"
+    EMPLOYEES ||--o{ ATTENDANCE_RECORDS : "punches"
+    EMPLOYEES ||--o{ LEAVE_REQUESTS : "submits"
+    EMPLOYEES ||--o{ LOANS : "applies"
+    EMPLOYEES ||--o{ PAYROLL_RECORDS : "receives"
+    USERS ||--o{ AUDIT_LOGS : "performed_by"
+    USERS ||--o{ NOTIFICATIONS : "targeted_to"
 ```
 
-### LocalStorage Schema Keys
+### 4.1 Schema Tables Reference
 
-- `flowpay-auth`: User session and accounts.
-- `flowpay-employees`: Employee directory and banking details.
-- `flowpay-attendance`: Daily check-in stamps and leave records.
-- `flowpay-loans`: Company personal loans, advances, and repayment ledgers.
-- `flowpay-payroll`: Historical and draft monthly payrolls.
-- `flowpay-settings`: Organizational configurations and tax rules.
-- `flowpay-notifications`: Targeted user notifications.
-- `flowpay-audit`: 500-entry security audit journal.
+#### 1. `public.users`
+Stores user authentication profiles, application roles, and employee linkage.
+- `id` (TEXT, PK): Matches Supabase Auth `auth.users.id`.
+- `name` (TEXT, NOT NULL): User display name.
+- `email` (TEXT, NOT NULL, UNIQUE): Corporate or personal email.
+- `role` (TEXT, NOT NULL, DEFAULT `'employee'`): User role (`'owner'`, `'admin'`, `'accountant'`, `'hr'`, `'employee'`).
+- `avatar` (TEXT): Base64 encoded or Supabase storage URL.
+- `is_active` (BOOLEAN, DEFAULT `true`): Account status flag.
+- `employee_id` (TEXT): Display ID (e.g., `EMP-001`) linking to `public.employees`.
+- `created_at` (TIMESTAMPTZ, DEFAULT `now()`).
+
+#### 2. `public.employees`
+Master employee record holding profile, organizational placement, and salary structure.
+- `id` (TEXT, PK): UUID format.
+- `employee_id` (TEXT, NOT NULL, UNIQUE): Display identifier (e.g. `EMP-001`).
+- `full_name` (TEXT, NOT NULL).
+- `email` (TEXT, NOT NULL).
+- `phone` (TEXT).
+- `photo` (TEXT): Avatar image data or URL.
+- `department` (TEXT, NOT NULL): Assigned department name.
+- `designation` (TEXT, NOT NULL): Job title.
+- `joining_date` (TEXT, NOT NULL): ISO date (`YYYY-MM-DD`).
+- `basic_salary` (NUMERIC, NOT NULL, DEFAULT 0): Base monthly pay in BDT.
+- `allowances` (NUMERIC, NOT NULL, DEFAULT 0): Aggregate total allowances.
+- `house_rent_allowance` (NUMERIC, DEFAULT 0): Specific house rent component.
+- `medical_allowance` (NUMERIC, DEFAULT 0): Specific medical component.
+- `transport_allowance` (NUMERIC, DEFAULT 0): Specific conveyance component.
+- `bonus` (NUMERIC, NOT NULL, DEFAULT 0): Standard recurring bonus.
+- `overtime` (NUMERIC, NOT NULL, DEFAULT 0): Fixed or default overtime.
+- `deductions` (NUMERIC, NOT NULL, DEFAULT 0): Recurring standard deductions.
+- `tax` (NUMERIC, NOT NULL, DEFAULT 0): Monthly withholding tax.
+- `bank_info` (JSONB): `{ bankName, accountNumber, routingNumber, accountType }`.
+- `payment_method` (TEXT): `'bank_transfer'`, `'mobile_banking'`, `'cash'`, `'check'`.
+- `mobile_banking_info` (JSONB): `{ provider, accountNumber, accountType }`.
+- `status` (TEXT, NOT NULL, DEFAULT `'active'`): `'active'` | `'inactive'`.
+- `pf_eligible` (BOOLEAN, DEFAULT `true`): Provident fund eligibility.
+- `leave_balance` (JSONB): `{"casual": 10, "sick": 14, "annual": 15}`.
+- `emergency_contact` (JSONB): `{ name, relation, phone }`.
+- `documents` (JSONB): `[ { id, name, type, uploadDate, size, url } ]`.
+- `created_at`, `updated_at` (TIMESTAMPTZ).
+
+#### 3. `public.attendance_records`
+Daily employee attendance and punch timestamps.
+- `id` (TEXT, PK).
+- `employee_id` (TEXT, NOT NULL).
+- `employee_name` (TEXT, NOT NULL).
+- `date` (TEXT, NOT NULL): Format `YYYY-MM-DD`.
+- `check_in` (TEXT): 24-hour military timestamp (`HH:mm`).
+- `check_out` (TEXT): 24-hour military timestamp (`HH:mm`).
+- `status` (TEXT, NOT NULL): `'present'`, `'absent'`, `'late'`, `'early_checkout'`, `'half_day'`, `'on_leave'`.
+- `late_check_in` (BOOLEAN, DEFAULT `false`): Flags arrival after 09:15 AM.
+- `early_check_out` (BOOLEAN, DEFAULT `false`): Flags departure before 17:00 (5:00 PM).
+- `manual_correction` (BOOLEAN, DEFAULT `false`): Flags HR/Admin overrides.
+- `corrected_by` (TEXT): Name of user who made the manual adjustment.
+- `notes` (TEXT): Audit explanation or punch notes.
+- *Constraint*: `uq_attendance_emp_date` (`UNIQUE(employee_id, date)`).
+
+#### 4. `public.leave_requests`
+Employee leave applications and management approvals.
+- `id` (TEXT, PK).
+- `employee_id` (TEXT, NOT NULL).
+- `employee_name` (TEXT, NOT NULL).
+- `department` (TEXT).
+- `leave_type` (TEXT, NOT NULL): `'casual'`, `'sick'`, `'annual'`, `'unpaid'`.
+- `start_date` (TEXT, NOT NULL): Start date (`YYYY-MM-DD`).
+- `end_date` (TEXT, NOT NULL): End date (`YYYY-MM-DD`).
+- `days_count` (INTEGER, NOT NULL): Total business days.
+- `reason` (TEXT, NOT NULL): Employee explanation.
+- `status` (TEXT, NOT NULL, DEFAULT `'pending'`): `'pending'`, `'approved'`, `'rejected'`.
+- `applied_at` (TIMESTAMPTZ, DEFAULT `now()`).
+- `approved_by` (TEXT).
+- `approved_at` (TIMESTAMPTZ).
+- `rejection_reason` (TEXT).
+
+#### 5. `public.loans`
+Employee personal loans and salary advance accounts.
+- `id` (TEXT, PK).
+- `employee_id` (TEXT, NOT NULL).
+- `employee_name` (TEXT, NOT NULL).
+- `department` (TEXT).
+- `type` (TEXT, NOT NULL, DEFAULT `'loan'`): `'loan'` | `'advance'`.
+- `principal_amount` (NUMERIC, NOT NULL): Total borrowed amount.
+- `monthly_installment` (NUMERIC, NOT NULL): Monthly recovery amount.
+- `remaining_balance` (NUMERIC, NOT NULL): Current unrecovered balance.
+- `term_months` (INTEGER, NOT NULL): Total repayment term in months.
+- `reason` (TEXT).
+- `status` (TEXT, NOT NULL, DEFAULT `'pending'`): `'pending'`, `'approved'`, `'rejected'`, `'active'`, `'completed'`.
+- `applied_at`, `approved_at` (TIMESTAMPTZ).
+- `approved_by` (TEXT).
+- `repayments` (JSONB, DEFAULT `'[]'`): `[ { id, date, amount, payrollRecordId, month, year } ]`.
+
+#### 6. `public.payroll_records`
+Computed monthly salary records for employees.
+- `id` (TEXT, PK).
+- `employee_id` (TEXT, NOT NULL).
+- `employee_name` (TEXT, NOT NULL).
+- `department` (TEXT, NOT NULL).
+- `designation` (TEXT, NOT NULL).
+- `month` (INTEGER, NOT NULL): Month (1-12).
+- `year` (INTEGER, NOT NULL): Year (e.g. 2026).
+- `basic_salary` (NUMERIC, NOT NULL).
+- `allowances` (NUMERIC, NOT NULL, DEFAULT 0).
+- `bonus` (NUMERIC, NOT NULL, DEFAULT 0).
+- `overtime` (NUMERIC, NOT NULL, DEFAULT 0).
+- `gross_salary` (NUMERIC, NOT NULL): `Basic + Allowances + Bonus + Overtime`.
+- `deductions` (NUMERIC, NOT NULL, DEFAULT 0): Standard recurring deductions.
+- `tax` (NUMERIC, NOT NULL, DEFAULT 0).
+- `unpaid_leave_days` (INTEGER, DEFAULT 0).
+- `leave_deduction` (NUMERIC, DEFAULT 0).
+- `absent_days` (INTEGER, DEFAULT 0).
+- `absence_deduction` (NUMERIC, DEFAULT 0).
+- `loan_deduction` (NUMERIC, DEFAULT 0).
+- `pf_employee_deduction` (NUMERIC, DEFAULT 0).
+- `pf_employer_contribution` (NUMERIC, DEFAULT 0).
+- `total_deductions` (NUMERIC, NOT NULL).
+- `net_salary` (NUMERIC, NOT NULL): `Gross - Total Deductions` (floored at 0).
+- `status` (TEXT, NOT NULL, DEFAULT `'draft'`): `'draft'`, `'approved'`, `'paid'`.
+- `payment_method` (TEXT): Payment disbursement mode.
+- `payment_date` (TEXT): Date payment was completed (`YYYY-MM-DD`).
+- `transaction_ref` (TEXT): Unique bank/MFS reference number.
+- `created_by`, `approved_by`, `paid_by` (TEXT).
+- `created_at`, `approved_at`, `paid_at` (TIMESTAMPTZ).
+- `breakdown` (JSONB): `{ houseRent, medical, transport, otherAllowances }`.
+- *Constraint*: `uq_payroll_emp_month_year` (`UNIQUE(employee_id, month, year)`).
+
+#### 7. `public.departments`
+Organizational departments.
+- `id` (TEXT, PK).
+- `name` (TEXT, NOT NULL, UNIQUE).
+- `head` (TEXT): Department Manager Name.
+- `head_id` (TEXT): Department Manager Employee ID.
+- `description` (TEXT).
+
+#### 8. `public.company_settings`
+Global company profile and compensation rules.
+- `id` (TEXT, PK, DEFAULT `'default'`).
+- `name` (TEXT, DEFAULT `'FlowPay Inc.'`).
+- `currency` (TEXT, DEFAULT `'BDT'`).
+- `currency_symbol` (TEXT, DEFAULT `'৳'`).
+- `standard_working_days` (INTEGER, DEFAULT 22).
+- `overtime_multiplier` (NUMERIC, DEFAULT 1.5).
+- `auto_deduct_absence_days` (BOOLEAN, DEFAULT true).
+- `rules_config` (JSONB): Holds nested configuration:
+  - `dailyWorkingHours` (default 8)
+  - `weeklyHoliday` (`'friday'`, `'friday_saturday'`)
+  - `halfDayDeduction` (boolean)
+  - `lateDeductionRules` (`{ enabled, graceMinutes, lateDaysThreshold, deductionDays }`)
+  - `festivalBonusConfig` (`{ enabled, type, value, frequencyPerYear }`)
+  - `salaryAdvanceEnabled`, `loanDeductionEnabled` (boolean)
+  - `salaryRoundingDecimals` (integer)
+
+#### 9. `public.notifications`
+Role-targeted and user-targeted notifications.
+- `id` (TEXT, PK).
+- `title` (TEXT, NOT NULL).
+- `message` (TEXT, NOT NULL).
+- `type` (TEXT, NOT NULL): `'info'`, `'success'`, `'warning'`, `'alert'`.
+- `is_read` (BOOLEAN, DEFAULT `false`).
+- `link` (TEXT): Optional navigation route.
+- `target_roles` (TEXT[]): Array of roles permitted to view (e.g. `['admin', 'owner', 'hr']`).
+- `target_user_id` (TEXT): Direct user recipient.
+- `target_employee_id` (TEXT): Direct employee recipient.
+
+#### 10. `public.audit_logs`
+Immutable compliance and audit trail.
+- `id` (TEXT, PK).
+- `user_id` (TEXT, NOT NULL).
+- `user_name` (TEXT, NOT NULL).
+- `action` (TEXT, NOT NULL): e.g., `"Approve Payroll"`, `"Correct Attendance"`.
+- `module` (TEXT, NOT NULL): e.g., `"Payroll"`, `"Attendance"`, `"Employees"`.
+- `details` (TEXT, NOT NULL): Detailed context of what changed.
+- `created_at` (TIMESTAMPTZ, DEFAULT `now()`).
 
 ---
 
-## 8. Deployment & Infrastructure Guide
+## 5. State Management Layer (Zustand Stores)
 
-### 8.1 Zero-Config Vercel Deployment
+FlowPay isolates application state into 9 specialized stores inside `src/stores/`. Below is a comprehensive reference of all stores and their functions.
 
-FlowPay includes a pre-configured [`vercel.json`](file:///c:/PROJECT/FlowPay/vercel.json) that solves client-side SPA routing (preventing 404s when reloading pages like `/dashboard` or `/employees`):
-
-```json
-{
-  "framework": "vite",
-  "buildCommand": "npm run build",
-  "outputDirectory": "dist",
-  "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
-    }
-  ]
-}
+```mermaid
+flowchart LR
+    subgraph Stores ["Zustand Store Ecosystem"]
+        authStore["authStore<br/>(User & Session)"]
+        employeeStore["employeeStore<br/>(Employees & Docs)"]
+        attendanceStore["attendanceStore<br/>(Punches & Leaves)"]
+        payrollStore["payrollStore<br/>(Payroll & History)"]
+        loanStore["loanStore<br/>(Loans & Repayments)"]
+        departmentStore["departmentStore<br/>(Org Units)"]
+        settingsStore["settingsStore<br/>(Company Rules)"]
+        notificationStore["notificationStore<br/>(Alerts & Queue)"]
+        auditStore["auditStore<br/>(Security Trail)"]
+    end
 ```
 
-#### Steps to Deploy on Vercel:
-1. Push your latest code to GitHub: `git push origin main`.
-2. Go to [vercel.com](https://vercel.com/) and click **"Add New..." $\rightarrow$ "Project"**.
-3. Select your repository `FlowPay` and click **"Import"**.
-4. Click **"Deploy"** (Vercel automatically detects Vite and builds to `dist`).
-5. Your application will be live on a global CDN in under 45 seconds.
+---
 
-### 8.2 Production Static Hosting (Nginx / Apache / Docker)
+### 5.1 `authStore.ts`
 
-Build the production assets:
+Manages session authentication, user accounts, and self-registration policies.
+
+| Function | Signature | Description & Behavior |
+| :--- | :--- | :--- |
+| `initAuth` | `() => Promise<void>` | Initializes session on app startup via `supabase.auth.getSession()`. Resolves linked `employee_id`, bootstraps missing profile in `public.users`, and registers `onAuthStateChange` listener. |
+| `login` | `(email, password) => Promise<{ success, message }>` | Authenticates credentials with Supabase Auth. Queries `public.users` to load the profile and linked `employeeId`. |
+| `signup` | `(email, password, name, role?) => Promise<{ success, message }>` | Registers a new account. Checks `public.users` count: if table is empty, bootstraps user as `'owner'`. Otherwise, strictly enforces `'employee'` role. Triggers automatic employee profile linking. |
+| `logout` | `() => Promise<void>` | Destroys Supabase session, resets `currentUser` and `isAuthenticated` to `false`. |
+| `fetchUsers` | `() => Promise<void>` | Retrieves all user records from `public.users` ordered by creation date. |
+| `addUser` | `(user, password?) => Promise<void>` | Admin-only function to manually create users via `supabase.auth.signUp` and insert record into `public.users`. |
+| `updateUser` | `(id, updates) => Promise<void>` | Updates user properties (name, role, status, employeeId) in state and `public.users`. |
+| `deleteUser` | `(id) => Promise<void>` | Removes user from state and deletes row from `public.users`. |
+| `toggleUserStatus` | `(id) => Promise<void>` | Inverts `isActive` status (activates/deactivates access). |
+| `updateProfile` | `(updates) => Promise<void>` | Updates `currentUser` profile details and avatar image data URL. |
+| `changePassword` | `(userId, curPass, newPass?) => Promise<{ success, message }>` | Updates password via `supabase.auth.updateUser({ password })`. |
+| `getUsersByRole` | `(role) => User[]` | Returns all users matching a specified role. |
+
+---
+
+### 5.2 `employeeStore.ts`
+
+Manages employee records, document attachments, and leave balance deductions.
+
+| Function | Signature | Description & Behavior |
+| :--- | :--- | :--- |
+| `fetchEmployees` | `() => Promise<void>` | Fetches all employees from `public.employees` and maps to `Employee[]`. |
+| `addEmployee` | `(employeeData) => Employee` | Generates next sequential employee display ID (e.g. `EMP-005`), initializes leave balances, updates state optimistically, and inserts into Supabase. |
+| `updateEmployee` | `(id, updates) => void` | Updates employee profile and compensation in state and syncs to Supabase. |
+| `deleteEmployee` | `(id) => void` | Removes employee record from state and Supabase table. |
+| `toggleEmployeeStatus` | `(id) => void` | Toggles status between `'active'` and `'inactive'`. |
+| `addDocument` | `(employeeId, doc) => void` | Appends uploaded document metadata (`name`, `size`, `type`, `url`) to employee's `documents` array. |
+| `deleteDocument` | `(employeeId, docId) => void` | Removes a document from the employee's document collection. |
+| `deductLeaveBalance` | `(employeeId, leaveType, days) => void` | Decrements available casual, sick, or annual leave balance upon leave approval. |
+| `updateDepartmentName` | `(oldName, newName) => void` | Cascades department name renames across all assigned employees. |
+| `getEmployeeById` | `(id) => Employee \| undefined` | Lookups an employee by UUID or display ID. |
+| `getActiveEmployees` | `() => Employee[]` | Returns all employees where `status === 'active'`. |
+| `searchEmployees` | `(query) => Employee[]` | Searches employees across name, ID, and department (case-insensitive). |
+| `getNextEmployeeId` | `() => string` | Computes the next display ID in sequence (`EMP-001`, `EMP-002`, etc.). |
+
+---
+
+### 5.3 `attendanceStore.ts`
+
+Coordinates check-in/out timestamps, 24h military time detection, late arrivals, early departures, and leave applications.
+
+| Function | Signature | Description & Behavior |
+| :--- | :--- | :--- |
+| `fetchAttendanceAndLeaves` | `() => Promise<void>` | Fetches all attendance records and leave applications from Supabase. |
+| `recordAttendance` | `(record) => void` | Inserts or updates an attendance record; upserts to `public.attendance_records`. |
+| `bulkRecordAttendance` | `(records) => void` | Deduplicates and batch upserts multiple records to Supabase. |
+| `correctAttendance` | `(id, updates, correctedBy) => void` | Sets `manualCorrection: true`, records `correctedBy`, and updates attendance in Supabase. |
+| `checkIn` | `(employeeId, employeeName) => void` | Formats current time in 24h (`HH:mm`). Detects late arrival: if check-in > 09:15 AM (09:00 + 15m grace), flags `status: 'late'` and `lateCheckIn: true`. |
+| `checkOut` | `(employeeId) => void` | Formats current time in 24h (`HH:mm`). Detects early departure: if check-out < 17:00 (5:00 PM), flags `earlyCheckOut: true` and updates status to `'early_checkout'`. |
+| `applyLeave` | `(leave) => void` | Creates a new leave application with `status: 'pending'` and syncs to Supabase. |
+| `approveLeave` | `(id, approvedBy) => void` | Approves leave, stamps `approvedBy` and `approvedAt`, and calls `employeeStore.deductLeaveBalance` if paid. |
+| `rejectLeave` | `(id, reason, rejectedBy) => void` | Rejects leave with documented rejection reason and logs to Supabase. |
+| `getAttendanceByDate` | `(date) => AttendanceRecord[]` | Filters records matching a specific date (`YYYY-MM-DD`). |
+| `getMonthlyEmployeeSummary` | `(employeeId, month, year) => Summary` | Aggregates monthly totals: present days, absent days, late days, early checkouts, half-days, approved leaves, unpaid leave days, and overtime hours (computed from total daily hours exceeding 8h). |
+
+---
+
+### 5.4 `payrollStore.ts`
+
+Controls payroll generation wizards, batch approvals, salary disbursements, and analytical trends.
+
+| Function | Signature | Description & Behavior |
+| :--- | :--- | :--- |
+| `fetchPayroll` | `() => Promise<void>` | Retrieves all payroll records from `public.payroll_records` ordered by year/month. |
+| `generatePayroll` | `(month, year, employees, createdBy, replaceExisting?) => PayrollRecord[]` | Runs `calculateFullSalary` across all eligible employees, creates draft records, purges old drafts for the period, and syncs new drafts to Supabase. |
+| `approvePayroll` | `(ids, approvedBy) => void` | Batch updates draft records to `'approved'`, updates Supabase via `.in('id', ids)`, and dispatches notifications to employees. |
+| `markAsPaid` | `(ids, paidBy, paymentMethod, transactionRef?) => void` | Disburses approved payroll. Deducts loan installments via `loanStore.recordInstallmentDeduction`, stamps `paymentDate`, `transactionRef`, and marks records `'paid'`. |
+| `updatePayrollRecord` | `(id, updates) => void` | Updates specific payroll adjustments (e.g., custom bonus or deduction) and recalculates totals. |
+| `deletePayrollRecord` | `(id) => void` | Deletes a draft payroll record from state and Supabase. |
+| `getPayrollByMonth` | `(month, year) => PayrollRecord[]` | Filters payroll records for a given month and year. |
+| `getMonthlyStats` | `(month, year) => Stats` | Aggregates financial totals: `total`, `paid`, `pending`, and `draft` amounts. |
+| `getSalaryTrends` | `(months) => SalaryTrend[]` | Computes historical gross and net disbursement trends for charts. |
+| `getDepartmentSalary` | `(month, year) => DepartmentSalary[]` | Aggregates payroll disbursement by department. |
+
+---
+
+### 5.5 `loanStore.ts`
+
+Governs personal loans, salary advances, automated monthly recoveries, and early settlements.
+
+| Function | Signature | Description & Behavior |
+| :--- | :--- | :--- |
+| `fetchLoans` | `() => Promise<void>` | Loads loan accounts and repayment schedules from `public.loans`. |
+| `applyLoan` | `(loanData) => LoanRecord` | Registers a loan/advance application with `status: 'pending'` and `remainingBalance = principalAmount`. |
+| `approveLoan` | `(id, approvedBy) => void` | Approves a loan, activating repayment deduction from future payroll cycles. |
+| `rejectLoan` | `(id) => void` | Sets loan status to `'rejected'`. |
+| `recordInstallmentDeduction` | `(empId, month, year, payrollId, amount?) => number` | Deducts monthly installment from active loan's `remainingBalance`, appends repayment entry, and marks loan `'completed'` when balance reaches 0. |
+| `reverseInstallmentDeduction` | `(empId, month, year, payrollId) => void` | Reverses an installment deduction if a paid payroll record is voided or audited. Restores remaining balance. |
+| `settleEarly` | `(id) => void` | Allows early manual payoff of remaining balance, setting status to `'completed'`. |
+| `getActiveLoan` | `(employeeId) => LoanRecord \| undefined` | Retrieves the active loan for an employee that is in repayment. |
+
+---
+
+### 5.6 `departmentStore.ts`
+
+Manages enterprise departments and leadership assignments.
+- `fetchDepartments()`: Loads departments or seeds standard departments (`Engineering`, `HR`, `Finance`, `Marketing`, `Sales`, `Operations`).
+- `addDepartment(dept)`: Inserts a new department.
+- `updateDepartment(id, updates)`: Modifies department name, head of department, or description.
+- `deleteDepartment(id)`: Removes department record.
+
+---
+
+### 5.7 `settingsStore.ts`
+
+Manages company parameters and compensation policy rules.
+- `fetchSettings()`: Loads singleton row from `public.company_settings`.
+- `updateSettings(partial)`: Modifies settings (working days, overtime multiplier, late penalty rules, festival bonuses) and syncs to Supabase.
+- `resetSettings()`: Restores `DEFAULT_COMPANY_SETTINGS`.
+
+---
+
+### 5.8 `notificationStore.ts`
+
+Role-based and user-targeted notification bus.
+- `addNotification(item)`: Emits notification with target roles (e.g. `['admin', 'hr']`) or target employee ID.
+- `markAsRead(id)`: Marks notification as read.
+- `markAllAsRead(user, employeeId)`: Marks all relevant notifications for a specific user as read.
+- `getUserNotifications(user, employeeId)`: Filters notifications matching the current user's role, user ID, or employee ID.
+- `getUnreadCount(user, employeeId)`: Returns unread badge count.
+
+---
+
+### 5.9 `auditStore.ts`
+
+Immutable system-wide compliance logging.
+- `addLog(entryData)`: Inserts audit event (user ID, user name, action, module, details) into memory and `public.audit_logs`.
+- `getLogsByModule(module)`: Filters audit logs by functional module.
+- `clearLogs()`: Clears audit log table (restricted to Owner).
+
+---
+
+## 6. Salary & Financial Calculation Engine (`src/lib/salary.ts`)
+
+FlowPay houses its financial formulas in pure, deterministic TypeScript functions.
+
+```mermaid
+flowchart TD
+    Basic["Basic Salary"]
+    Allowances["Allowances (House Rent + Medical + Transport)"]
+    Bonus["Bonus (Standard or Festival)"]
+    Overtime["Overtime Pay (Hours * Hourly Rate * 1.5)"]
+
+    Gross["Gross Salary = Basic + Allowances + Bonus + Overtime"]
+
+    Basic --> Gross
+    Allowances --> Gross
+    Bonus --> Gross
+    Overtime --> Gross
+
+    subgraph Deductions ["Total Deductions"]
+        Tax["Withholding Tax (0% default)"]
+        LeaveDed["Unpaid Leave Deduction"]
+        AbsenceDed["Absence Deduction"]
+        HalfDayDed["Half-Day Deduction"]
+        LateDed["Late Arrival Penalties"]
+        PF["Provident Fund (Employee Share)"]
+        Loan["Loan Installment Deduction"]
+        OtherDed["Other Standard Deductions"]
+    end
+
+    Gross --> Net["Net Salary = max(0, Gross - Total Deductions)"]
+    Deductions --> Net
+```
+
+### Detailed Mathematical Formulas:
+
+#### 1. Currency Rounding:
+$$\text{roundCurrency}(x) = \frac{\lfloor (x + \epsilon) \cdot 100 + 0.5 \rfloor}{100}$$
+
+#### 2. Gross Salary:
+$$\text{Gross} = \text{Basic} + \text{Allowances} + \text{Bonus} + \text{Overtime}$$
+
+#### 3. Hourly Overtime Pay:
+$$\text{Hourly Rate} = \frac{\text{Basic Salary}}{\text{Standard Working Days} \times \text{Daily Working Hours}}$$
+$$\text{Overtime Pay} = \text{Overtime Hours} \times \text{Hourly Rate} \times \text{Overtime Multiplier}$$
+
+#### 4. Unpaid Leave & Absence Deductions:
+$$\text{Daily Rate} = \frac{\text{Basic Salary}}{\text{Standard Working Days}}$$
+$$\text{Unpaid Leave Deduction} = \text{Unpaid Days} \times \text{Daily Rate}$$
+$$\text{Absence Deduction} = \text{Absent Days} \times \text{Daily Rate}$$
+$$\text{Half-Day Deduction} = \text{Half Days} \times 0.5 \times \text{Daily Rate}$$
+
+#### 5. Late Arrival Threshold Deduction:
+$$\text{Penalty Units} = \lfloor \frac{\text{Late Days}}{\text{Threshold}} \rfloor$$
+$$\text{Late Deduction} = \text{Penalty Units} \times \text{Deduction Days} \times \text{Daily Rate}$$
+
+#### 6. Provident Fund (PF):
+$$\text{Employee PF} = \frac{\text{Basic Salary} \times \text{PF Employee}\%}{100}$$
+$$\text{Employer PF} = \frac{\text{Basic Salary} \times \text{PF Employer}\%}{100}$$
+
+#### 7. Net Salary Floor Safeguard:
+$$\text{Total Deductions} = \text{Tax} + \text{Leave/Absence Deductions} + \text{Loan Installment} + \text{Employee PF} + \text{Other Deductions}$$
+$$\text{Net Salary} = \max(0, \text{Gross} - \text{Total Deductions})$$
+
+---
+
+## 7. Page-by-Page Functional & Architectural Breakdown
+
+### 7.1 Authentication (`LoginPage.tsx`)
+- **Route**: `/login`
+- **Access**: Public
+- **Features**: Dual-mode Sign In / Sign Up tabbed view. Remembers corporate credentials, displays password toggles, and provides demo login presets (Owner, Admin, Accountant, HR, Employee).
+- **Security Rule**: Enforces first-user Super Admin ('owner') bootstrap; all subsequent public signups default to 'employee'.
+
+---
+
+### 7.2 Executive Dashboard (`DashboardPage.tsx`)
+- **Route**: `/`
+- **Access**: All Authenticated Roles (Adaptive content by role)
+- **Features**:
+  - Executive KPI Cards: Total Active Employees, Monthly Payroll Budget, Disbursed Amount, Pending Actions.
+  - Role-specific view: Employees see their linked personal payslip summary, year-to-date earnings, and leave balances; Admins see company-wide metrics.
+  - Interactive Charts: Monthly payroll expense trend (Area Chart) and Departmental budget allocation (Bar Chart).
+  - Quick Action Queue: Pending leave applications and loan requests with 1-click review shortcuts.
+  - Real-time Attendance Summary: Today's present, late, on-leave, and absent counts.
+
+---
+
+### 7.3 Employee Management Module
+
+#### `AllEmployeesPage.tsx` (`/employees`)
+- **Access**: Owner, Admin, HR, Accountant
+- **Features**: Search bar, department filter, active/inactive status filter. Multi-format export to CSV, Excel (`.xlsx`), and printable directory. Renders responsive employee cards and directory table.
+
+#### `AddEmployeePage.tsx` (`/employees/add`)
+- **Access**: Owner, Admin, HR
+- **Features**: Multi-section onboarding form:
+  1. *Personal Details*: Full name, email, phone, profile photo picker with client-side canvas compression.
+  2. *Employment Details*: Department, designation, joining date, initial leave balances.
+  3. *Salary & Allowances Structure*: Basic salary input with real-time computation of House Rent (50%), Medical (30%), Transport (20%), and custom allowance override.
+  4. *Banking & MFS*: Bank name, account number, routing number, bKash/Nagad mobile banking details.
+  5. *Emergency Contact & Documents*: Contact person and document attachment.
+
+#### `EditEmployeePage.tsx` (`/employees/:id/edit`)
+- **Access**: Owner, Admin, HR
+- **Features**: Pre-populates all existing data, handles allowance recalculations, and updates PostgreSQL records.
+
+#### `EmployeeProfilePage.tsx` (`/employees/:id`)
+- **Access**: All Roles (Employees can only view their own profile; Owner/Admin/HR can view all)
+- **Features**: 5 tabbed sections:
+  1. *Profile Overview*: Personal details, department, designation, emergency contacts, quick actions.
+  2. *Salary Breakdown*: Card showing Basic, House Rent, Medical, Transport, Total Gross, and PF status.
+  3. *Attendance History*: Monthly ledger of all check-in/out records for this employee.
+  4. *Payslips History*: Chronological list of issued payslips with PDF preview and download.
+  5. *Loans & Advances*: Active and completed loans with repayment schedules.
+  6. *Document Vault*: Upload files (National ID, CV, Certificates) with automatic file size computation and instant downloads.
+
+#### `DepartmentsPage.tsx` (`/departments`)
+- **Access**: Owner, Admin, HR
+- **Features**: Department grid, employee counts per department, assigning department heads, adding and editing organizational units.
+
+---
+
+### 7.4 Attendance & Leave Management (`AttendancePage.tsx`)
+- **Route**: `/attendance`
+- **Access**: All Authenticated Users
+- **Features**:
+  - **Employee Punch Widget**: Shows today's date, current status (`PRESENT`, `LATE`, `NOT CHECKED IN`), check-in time, and check-out time.
+  - **Late Check-in Detection**: Check-in after 09:15 AM triggers `status: 'late'` and renders amber `Late` badges.
+  - **Early Check-out Detection**: Check-out before 17:00 (5:00 PM) triggers `early_checkout` status and renders orange `Early` badges.
+  - **Daily Attendance Ledger with Absent Synthesis**:
+    - Select any calendar date (`selectedDate`).
+    - The ledger maps across **all active employees**.
+    - If an employee has no punch record and no approved leave, they are displayed with status **`Absent`** (red marker and badge).
+    - Admins can click **`Mark / Edit`** on an absent employee to record attendance manually.
+  - **Responsive Dual-View Architecture**:
+    - *Desktop View (`hidden md:block`)*: Full 7-column data table.
+    - *Mobile View (`md:hidden`)*: Touch-friendly cards showing status, punch times, and action buttons.
+  - **Leave Management Tab**:
+    - Leave Application dialog with day counter.
+    - Leave Approval Queue with 1-click **Approve** and **Reject** buttons for Managers.
+
+---
+
+### 7.5 Payroll Management Module
+
+#### `GeneratePayrollPage.tsx` (`/payroll/generate`)
+- **Access**: Owner, Admin, Accountant
+- **Features**: 2-step payroll generation wizard:
+  1. *Period Selection & Discovery*: Pick month and year. Scans attendance records to auto-detect overtime hours and absence days; scans loans for active installments; checks festival bonus policy rules.
+  2. *Review & Adjustments*: Previews gross, individual allowances, deductions, and net salary. Admins can tweak adjustments before saving.
+  3. *Batch Creation*: Purges previous draft records for the period and creates fresh drafts in Supabase.
+
+#### `CurrentPayrollPage.tsx` (`/payroll`)
+- **Access**: Owner, Admin, Accountant
+- **Features**: Displays active month payroll. Provides batch selection to **Batch Approve** drafts or **Batch Mark as Paid** with disbursement payment method assignment (`bank_transfer`, `mobile_banking`, `cash`, `check`).
+
+#### `PayrollHistoryPage.tsx` (`/payroll/history`)
+- **Access**: Owner, Admin, Accountant
+- **Features**: Historical archive filtered by year and month. Displays gross pay, deductions, net salary totals, and export buttons.
+
+#### `PayrollDetailPage.tsx` (`/payroll/:id`)
+- **Access**: Owner, Admin, Accountant, Employee (own record only)
+- **Features**: Full ledger breakdown of a payroll item: gross salary, allowances breakdown (House Rent, Medical, Transport), deductions breakdown (Tax, Leave, Loan, PF), transaction reference, and digital signature preview.
+
+---
+
+### 7.6 Payslip Center (`AllPayslipsPage.tsx`)
+- **Route**: `/payslips`
+- **Access**: All Roles (Employees view own payslips; Admins view all)
+- **Features**: Monthly filter, payslip search, modal payslip preview, and instant client-side vector PDF download rendered via `PayslipTemplate.tsx`.
+
+---
+
+### 7.7 Loans & Salary Advances (`LoansPage.tsx`)
+- **Route**: `/loans`
+- **Access**: All Roles (Employees apply for loans; Admins approve/reject)
+- **Features**:
+  - Loan Application Modal: Principal amount, term in months, monthly installment preview, reason.
+  - Active Loans Ledger: Principal, remaining balance, installment amount, status badge.
+  - Repayment History: Schedule showing every deduction linked to specific payroll runs.
+  - Early Settlement: Settle remaining balance manually.
+
+---
+
+### 7.8 Analytics & Reporting Modules
+- `SalaryReportPage.tsx` (`/reports/salary`): Department-wise salary disbursements, average pay, total cost to company, export to Excel/PDF.
+- `DepartmentReportPage.tsx` (`/reports/department`): Budget allocation and headcount per department.
+- `PaymentReportPage.tsx` (`/reports/payment`): Disbursement channel breakdown (Bank Transfer, bKash, Nagad, Cash).
+- `YearlySummaryPage.tsx` (`/reports/yearly`): Fiscal year summary with 12-month gross vs net comparison charts.
+
+---
+
+### 7.9 System Settings & Administration
+- `CompanySettingsPage.tsx` (`/settings/company`): Corporate name, tax ID, currency, logo, working days.
+- `SalarySettingsPage.tsx` (`/settings/salary`): Overtime multiplier, daily working hours, weekly holiday, half-day deduction toggle, late arrival threshold rules, festival bonus rules, and decimal rounding configuration.
+- `UsersRolesPage.tsx` (`/settings/users`): RBAC user management, assigning roles (`Owner`, `Admin`, `Accountant`, `HR`, `Employee`), activating/deactivating accounts.
+- `AuditLogsPage.tsx` (`/settings/audit-logs`): Immutable audit trail search and filtering.
+
+---
+
+### 7.10 User Profile (`ProfilePage.tsx`)
+- **Route**: `/profile`
+- **Access**: All Users
+- **Features**: Profile photo upload with client-side canvas crop/compression, password change, and banking information review.
+
+---
+
+## 8. Role-Based Access Control (RBAC) & Security Architecture
+
+FlowPay enforces strict permissions across both the UI layer (`usePermissions.ts`, `ProtectedRoute.tsx`) and the database layer (PostgreSQL RLS).
+
+### Permissions Matrix:
+
+| Module / Action | Owner | Admin | Accountant | HR | Employee |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| **View Dashboard** | Yes | Yes | Yes | Yes | Own Data |
+| **Manage Employees (Add/Edit/Delete)** | Yes | Yes | View Only | Yes | No |
+| **View Employee Salaries** | Yes | Yes | Yes | No | Own Only |
+| **Attendance Punch (Check In / Out)** | Yes | Yes | Yes | Yes | Own Only |
+| **Manage Attendance (Correct/Edit)** | Yes | Yes | No | Yes | No |
+| **Apply for Leave** | Yes | Yes | Yes | Yes | Yes |
+| **Approve / Reject Leaves** | Yes | Yes | No | Yes | No |
+| **Apply for Loans / Advances** | Yes | Yes | Yes | Yes | Yes |
+| **Approve / Settle Loans** | Yes | Yes | Yes | No | No |
+| **Generate & Approve Payroll** | Yes | Yes | Yes | No | No |
+| **Mark Payroll as Paid** | Yes | Yes | Yes | No | No |
+| **View All Payslips** | Yes | Yes | Yes | No | Own Only |
+| **Financial & Salary Reports** | Yes | Yes | Yes | Department Only | No |
+| **Company & Salary Settings** | Yes | Yes | Salary Rules | No | No |
+| **User Role Assignment** | Yes | Yes | No | No | No |
+| **View Audit Logs** | Yes | Yes | Yes | No | No |
+
+---
+
+## 9. Utilities, Mappers, and Helper Modules
+
+### 9.1 `src/lib/dbMappers.ts`
+Provides bidirectional transformations between PostgreSQL `snake_case` database rows and domain `camelCase` models:
+- `rowToUser` / `userToRow`
+- `rowToEmployee` / `employeeToRow`
+- `rowToAttendance` / `attendanceToRow`
+- `rowToLeave` / `leaveToRow`
+- `rowToLoan` / `loanToRow`
+- `rowToPayroll` / `payrollToRow`
+- `rowToSettings` / `settingsToRow`
+- `rowToNotification` / `notificationToRow`
+- `rowToAudit` / `auditToRow`
+
+### 9.2 `src/lib/export.ts`
+- `exportToCSV(data, filename)`: Converts JSON data to `.csv` via SheetJS.
+- `exportToExcel(data, filename, sheetName)`: Exports JSON data to `.xlsx`.
+- `exportToPDF(elementId, filename)`: Rasterizes an HTML DOM node via `html2canvas` at 2x scale and writes a vector `.pdf` file via `jsPDF`.
+
+### 9.3 `src/lib/imageUtils.ts`
+- `processImageFile(file, maxDimension, quality)`: Crops an uploaded image to a centered square, resizes to a max width of 320px on an HTML5 Canvas, and compresses to WebP/JPEG data URL (~15-30KB).
+- `uploadAvatar(file, userId)`: Processes avatar and uploads to Supabase storage.
+
+### 9.4 `src/lib/utils.ts`
+- `formatCurrency(amount, currency, symbol)`: Formats numbers into locale-aware currency strings (e.g. `৳50,000.00`).
+- `formatDate(dateString)`: Formats ISO dates into human-readable strings (e.g. `Nov 17, 2026`).
+- `getLocalDateString()`: Returns local date string in `YYYY-MM-DD` without UTC drift.
+- `generateId()`: Generates random collision-resistant unique identifiers.
+- `cn(...inputs)`: Merges Tailwind CSS class names via `clsx` and `tailwind-merge`.
+
+---
+
+## 10. Automated Test Suites & QA Verification
+
+FlowPay includes comprehensive automated test suites executed via `npx tsx`:
+
 ```bash
+# Run payroll formulas unit test suite (30 assertions)
+npm test
+
+# Run technical audit validation suite (9 assertions)
+npx tsx tests/auditValidation.test.ts
+```
+
+### Verified Test Scenarios:
+1. Basic-only salary calculation.
+2. Allowances aggregation (House Rent + Medical + Transport).
+3. Overtime pay calculation with fractional hours and multiplier verification.
+4. Single-deduction verification (prevents double absence deductions).
+5. Loan installment deduction capped at remaining balance.
+6. Provident Fund computation for employee and employer.
+7. Negative net salary prevention safeguard.
+8. Decimal rounding precision to 2 decimal places.
+9. Late arrival threshold penalties (e.g., 3 lates = 1 day deduction).
+10. Half-day deduction calculations (0.5 day rate).
+
+---
+
+## 11. Deployment, Environment & Operational Guide
+
+### 11.1 Environment Configuration (`.env`)
+```env
+VITE_SUPABASE_URL=https://hvjzwytvljmnnwqahpky.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+
+### 11.2 Database Migration Execution
+```bash
+# Run PostgreSQL schema migration and RLS policies on Supabase
+node scripts/migrate.js
+```
+
+### 11.3 Production Build
+```bash
+# Typecheck and bundle production assets
 npm run build
-```
-The output directory is `/dist`. Configure your web server to serve `index.html` for all requests:
 
-#### Nginx Configuration:
-```nginx
-server {
-    listen 80;
-    server_name payroll.yourcompany.com;
-    root /var/www/flowpay/dist;
-    index index.html;
-
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-
-    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg)$ {
-        expires 1y;
-        add_header Cache-Control "public, immutable";
-    }
-}
+# Preview production build locally
+npm run preview
 ```
 
 ---
-
-## 9. Developer Guide & Local Setup
-
-### Prerequisites
-- **Node.js**: `v18.0.0` or higher (Recommended: LTS `v20.x`)
-- **Package Manager**: `npm` (`v9.x`+) or `pnpm`
-
-### Installation Steps
-
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/eftyqhar/FlowPay.git
-   cd FlowPay
-   ```
-
-2. **Install dependencies:**
-   ```bash
-   npm install
-   ```
-
-3. **Start the local development server:**
-   ```bash
-   npm run dev
-   ```
-   Open [http://localhost:5173](http://localhost:5173) in your browser.
-
-4. **Run TypeScript type checking & Production build:**
-   ```bash
-   npm run build
-   ```
-
-5. **Run test suite:**
-   ```bash
-   npm run test
-   ```
-
----
-
-## 10. Troubleshooting & Frequently Asked Questions
-
-#### Q1: Does FlowPay require an external SQL or NoSQL database to deploy on Vercel?
-**No.** FlowPay runs as a client-side Single Page Application (SPA). All state is stored locally inside the browser's `localStorage` via Zustand's persistence engine. When opened for the first time, `seedData.ts` automatically populates the system with 25 employees and 6 months of historical payroll.
-
-#### Q2: What happens if an employee is deleted? Will existing payroll records break?
-**No.** FlowPay uses resilient record snapshots. When payroll is generated, the employee's name, department, and salary structures are snapshot into the `PayrollRecord`. Historical department reports and payslips remain completely intact even if the employee is subsequently archived or deleted.
-
-#### Q3: Why does reloading a page on Vercel cause a 404 error?
-This happens on single-page applications when the web server tries to find a physical file matching the URL path (e.g. `/employees`). FlowPay includes a [`vercel.json`](file:///c:/PROJECT/FlowPay/vercel.json) rewrite rule that routes all URL paths to `/index.html`, eliminating 404 errors completely.
-
-#### Q4: How does FlowPay protect browser LocalStorage from overflowing?
-Browser LocalStorage has a quota of approximately 5 MB. FlowPay's `auditStore.ts` and `notificationStore.ts` enforce an automated ring-buffer (capped at 500 and 200 records respectively). When new entries arrive, the oldest records are safely dropped, ensuring the storage quota is never exceeded.
-
----
-
-<p align="center">
-  <sub>Built with ❤️ for modern HR and Finance Teams • FlowPay Enterprise System Documentation</sub>
-</p>
+*FlowPay Enterprise Documentation • Updated November 2026*
