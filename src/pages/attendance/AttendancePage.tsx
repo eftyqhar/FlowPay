@@ -49,7 +49,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { useAuditStore } from '@/stores/auditStore';
 import { useNotificationStore } from '@/stores/notificationStore';
 import { ATTENDANCE_STATUSES, LEAVE_STATUSES } from '@/lib/constants';
-import { formatDate, getLocalDateString } from '@/lib/utils';
+import { formatDate, getLocalDateString, cn } from '@/lib/utils';
 import { AttendanceRecord, AttendanceStatus, LeaveType } from '@/lib/types';
 import { toast } from 'sonner';
 
@@ -488,20 +488,20 @@ export default function AttendancePage() {
     : leaveRequests;
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+    <div className="space-y-4 sm:space-y-6 max-w-7xl mx-auto">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
         <PageHeader
           title="Attendance & Leave Management"
           description="Daily employee check-in tracking, attendance audit, and leave approval workflows"
         />
-        <div className="flex gap-2">
+        <div className="flex gap-2 w-full sm:w-auto">
           <Dialog open={leaveModalOpen} onOpenChange={setLeaveModalOpen}>
             <DialogTrigger asChild>
-              <Button className="bg-indigo-600 hover:bg-indigo-700">
+              <Button className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700">
                 <Plus className="w-4 h-4 mr-2" /> Apply for Leave
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="max-h-[85vh] overflow-y-auto w-[calc(100%-2rem)] sm:max-w-lg">
               <DialogHeader>
                 <DialogTitle>Leave Application</DialogTitle>
               </DialogHeader>
@@ -545,7 +545,7 @@ export default function AttendancePage() {
                   </Select>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-2">
                     <Label htmlFor="startDate">Start Date</Label>
                     <Input
@@ -592,11 +592,11 @@ export default function AttendancePage() {
                   />
                 </div>
 
-                <DialogFooter className="pt-2">
-                  <Button type="button" variant="outline" onClick={() => setLeaveModalOpen(false)}>
+                <DialogFooter className="pt-2 flex flex-col-reverse sm:flex-row gap-2">
+                  <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => setLeaveModalOpen(false)}>
                     Cancel
                   </Button>
-                  <Button type="submit" className="bg-indigo-600 hover:bg-indigo-700">
+                  <Button type="submit" className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700">
                     Submit Application
                   </Button>
                 </DialogFooter>
@@ -609,16 +609,16 @@ export default function AttendancePage() {
       {/* Check-In / Check-Out Widget for current employee */}
       {myEmployee && (
         <Card className="bg-gradient-to-r from-indigo-50 via-white to-slate-50 border-indigo-100 shadow-sm">
-          <CardContent className="p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <div className="flex items-center gap-3.5">
-              <div className="h-12 w-12 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-sm">
-                <Clock className="w-6 h-6" />
+          <CardContent className="p-4 sm:p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div className="flex items-center gap-3 sm:gap-3.5">
+              <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-sm shrink-0">
+                <Clock className="w-5 h-5 sm:w-6 sm:h-6" />
               </div>
               <div>
-                <h3 className="font-bold text-slate-900 text-base">
+                <h3 className="font-bold text-slate-900 text-sm sm:text-base">
                   Today's Attendance: {myEmployee.fullName}
                 </h3>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-slate-500 mt-0.5">
                   Date: {formatDate(today)} • Status:{' '}
                   <span className="font-semibold text-slate-800">
                     {myTodayRecord ? myTodayRecord.status.toUpperCase() : 'NOT CHECKED IN'}
@@ -629,11 +629,11 @@ export default function AttendancePage() {
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 w-full sm:w-auto">
               <Button
                 variant={myTodayRecord ? 'outline' : 'default'}
                 disabled={!!myTodayRecord}
-                className={!myTodayRecord ? 'bg-indigo-600 hover:bg-indigo-700' : ''}
+                className={cn("flex-1 sm:flex-none", !myTodayRecord && "bg-indigo-600 hover:bg-indigo-700")}
                 onClick={handleCheckIn}
               >
                 <CheckCircle2 className="w-4 h-4 mr-1.5" /> Check In
@@ -641,6 +641,7 @@ export default function AttendancePage() {
               <Button
                 variant="secondary"
                 disabled={!myTodayRecord || !!myTodayRecord.checkOut}
+                className="flex-1 sm:flex-none"
                 onClick={handleCheckOut}
               >
                 <Clock className="w-4 h-4 mr-1.5" /> Check Out
@@ -652,7 +653,7 @@ export default function AttendancePage() {
 
       {/* Daily Metrics */}
       {!isEmployee && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-4">
           <StatCard
             title="Present Today"
             value={stats.present.toString()}
@@ -674,6 +675,7 @@ export default function AttendancePage() {
             icon={Calendar}
           />
           <StatCard
+            className="col-span-2 sm:col-span-1 md:col-span-1"
             title="Absent"
             value={stats.absent.toString()}
             icon={XCircle}
@@ -682,7 +684,7 @@ export default function AttendancePage() {
       )}
 
       <Tabs defaultValue="daily" className="w-full">
-        <TabsList className="mb-4">
+        <TabsList className="mb-4 w-full sm:w-auto grid grid-cols-2 sm:inline-flex">
           <TabsTrigger value="daily">
             {isEmployee ? 'My Attendance History' : 'Daily Attendance Ledger'}
           </TabsTrigger>
@@ -698,20 +700,20 @@ export default function AttendancePage() {
                 <CardTitle className="text-base font-semibold">
                   {isEmployee ? 'Attendance Record' : `Attendance for ${formatDate(selectedDate)}`}
                 </CardTitle>
-                <CardDescription>
+                <CardDescription className="text-xs sm:text-sm">
                   Showing {dateRecords.length} recorded entries ({stats.absent} Absent, {stats.late} Late, {stats.earlyCheckout} Early Check-out)
                 </CardDescription>
               </div>
 
               {!isEmployee && (
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-start">
                   <Label htmlFor="dateSelect" className="text-xs text-slate-500 whitespace-nowrap">
                     Filter Date:
                   </Label>
                   <Input
                     id="dateSelect"
                     type="date"
-                    className="w-44 bg-white"
+                    className="w-full sm:w-44 bg-white"
                     value={selectedDate}
                     onChange={(e) => setSelectedDate(e.target.value)}
                   />
@@ -719,7 +721,128 @@ export default function AttendancePage() {
               )}
             </CardHeader>
             <CardContent>
-              <div className="rounded-md border overflow-x-auto">
+              {/* Mobile Attendance Cards (md:hidden) */}
+              <div className="space-y-3 md:hidden">
+                {dateRecords.length === 0 ? (
+                  <div className="text-center py-8 text-slate-500 text-sm bg-white rounded-lg border">
+                    No attendance records found for this date.
+                  </div>
+                ) : (
+                  dateRecords.map((rec) => {
+                    const isLate = rec.lateCheckIn || rec.status === 'late' || isLateCheckIn(rec.checkIn);
+                    const isEarly = rec.earlyCheckOut || rec.status === 'early_checkout' || (rec.checkOut ? isEarlyCheckOut(rec.checkOut) : false);
+
+                    return (
+                      <div
+                        key={rec.id}
+                        className={cn(
+                          "p-3.5 rounded-lg border bg-white shadow-sm space-y-2.5 transition-colors",
+                          rec.status === 'absent' && "border-red-200 bg-red-50/20"
+                        )}
+                      >
+                        {/* Header: Employee Name, Date & Status */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              {rec.status === 'absent' && (
+                                <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block shrink-0" title="Absent" />
+                              )}
+                              {rec.status === 'late' && (
+                                <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block shrink-0" title="Late Check-in" />
+                              )}
+                              {rec.status === 'early_checkout' && (
+                                <span className="w-2.5 h-2.5 rounded-full bg-orange-500 inline-block shrink-0" title="Early Check-out" />
+                              )}
+                              {rec.status === 'present' && (
+                                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block shrink-0" title="Present" />
+                              )}
+                              {rec.status === 'on_leave' && (
+                                <span className="w-2.5 h-2.5 rounded-full bg-purple-500 inline-block shrink-0" title="On Leave" />
+                              )}
+                              <span className="font-semibold text-slate-900 text-sm">{rec.employeeName}</span>
+                            </div>
+                            <span className="text-[11px] text-slate-500 block mt-0.5">{formatDate(rec.date)}</span>
+                          </div>
+
+                          <div className="flex flex-col items-end gap-1">
+                            <span
+                              className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold border ${
+                                ATTENDANCE_STATUSES[rec.status as AttendanceStatus]?.color || 'bg-slate-100 text-slate-800 border-slate-200'
+                              }`}
+                            >
+                              {ATTENDANCE_STATUSES[rec.status as AttendanceStatus]?.label || rec.status}
+                            </span>
+                            {rec.status === 'late' && isEarly && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium bg-orange-100 text-orange-800 border border-orange-200">
+                                Early Check-out
+                              </span>
+                            )}
+                            {rec.status === 'early_checkout' && isLate && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium bg-amber-100 text-amber-800 border border-amber-200">
+                                Late Check-in
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* In/Out Times */}
+                        <div className="grid grid-cols-2 gap-2 bg-slate-50/70 p-2.5 rounded-md text-xs border border-slate-100">
+                          <div>
+                            <span className="text-[10px] text-slate-400 block uppercase font-medium">Check-In</span>
+                            <div className="flex items-center gap-1.5 font-mono text-slate-800 font-semibold mt-0.5">
+                              <span>{rec.checkIn || '—'}</span>
+                              {rec.checkIn && isLate && (
+                                <Badge variant="outline" className="px-1 py-0 text-[9px] font-semibold bg-amber-50 text-amber-700 border-amber-300">
+                                  Late
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-slate-400 block uppercase font-medium">Check-Out</span>
+                            <div className="flex items-center gap-1.5 font-mono text-slate-800 font-semibold mt-0.5">
+                              <span>{rec.checkOut || '—'}</span>
+                              {rec.checkOut && isEarly && (
+                                <Badge variant="outline" className="px-1 py-0 text-[9px] font-semibold bg-orange-50 text-orange-700 border-orange-300">
+                                  Early
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Notes & Actions */}
+                        <div className="flex items-center justify-between pt-1 text-xs">
+                          <div className="text-[11px] text-slate-500 truncate max-w-[200px]">
+                            {rec.manualCorrection ? (
+                              <span className="text-indigo-600 font-medium">Corrected: {rec.notes || 'By Admin'}</span>
+                            ) : (
+                              rec.notes || 'No remarks'
+                            )}
+                          </div>
+                          {canManageAttendance && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleOpenCorrection(rec)}
+                              className={cn(
+                                "h-7 text-xs px-2.5",
+                                rec.status === 'absent' ? 'text-indigo-600 border-indigo-200 hover:bg-indigo-50 font-medium' : 'text-slate-600'
+                              )}
+                            >
+                              <Edit2 className="w-3 h-3 mr-1" />
+                              {rec.status === 'absent' ? 'Mark' : 'Edit'}
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Desktop Attendance Table (hidden md:block) */}
+              <div className="hidden md:block rounded-md border overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-slate-50/50">
@@ -857,7 +980,81 @@ export default function AttendancePage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="rounded-md border overflow-x-auto">
+              {/* Mobile Leave Requests Cards (md:hidden) */}
+              <div className="space-y-3 md:hidden">
+                {visibleLeaves.length === 0 ? (
+                  <div className="text-center py-8 text-slate-500 text-sm bg-white rounded-lg border">
+                    No leave applications on record.
+                  </div>
+                ) : (
+                  visibleLeaves.map((req) => (
+                    <div key={req.id} className="p-3.5 rounded-lg border bg-white shadow-sm space-y-2.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="font-semibold text-slate-900 text-sm">{req.employeeName}</div>
+                          <div className="text-[11px] text-slate-500">{req.department}</div>
+                        </div>
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold border ${
+                            LEAVE_STATUSES[req.status]?.color || 'bg-slate-100'
+                          }`}
+                        >
+                          {LEAVE_STATUSES[req.status]?.label || req.status}
+                        </span>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                        <Badge variant="outline" className="capitalize text-[10px]">
+                          {req.leaveType}
+                        </Badge>
+                        <span className="text-slate-400">•</span>
+                        <span className="font-medium text-slate-800">{req.daysCount} day(s)</span>
+                        <span className="text-slate-400">•</span>
+                        <span className="text-slate-500 text-[11px]">
+                          {formatDate(req.startDate)} – {formatDate(req.endDate)}
+                        </span>
+                      </div>
+
+                      {req.reason && (
+                        <p className="text-xs text-slate-600 bg-slate-50 p-2 rounded text-[11px]">
+                          <span className="font-medium text-slate-700">Reason:</span> {req.reason}
+                        </p>
+                      )}
+
+                      {canApproveLeaves && (
+                        <div className="pt-1">
+                          {req.status === 'pending' ? (
+                            <div className="grid grid-cols-2 gap-2">
+                              <Button
+                                size="sm"
+                                className="bg-emerald-600 hover:bg-emerald-700 h-8 text-xs font-medium"
+                                onClick={() => handleApproveLeave(req)}
+                              >
+                                <ThumbsUp className="w-3.5 h-3.5 mr-1" /> Approve
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="text-red-600 border-red-200 hover:bg-red-50 h-8 text-xs font-medium"
+                                onClick={() => handleRejectLeave(req)}
+                              >
+                                <ThumbsDown className="w-3.5 h-3.5 mr-1" /> Reject
+                              </Button>
+                            </div>
+                          ) : (
+                            <span className="text-[11px] text-slate-400 block text-right">
+                              {req.approvedBy ? `Reviewed by ${req.approvedBy}` : 'Completed'}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Desktop Table View (hidden md:block) */}
+              <div className="hidden md:block rounded-md border overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-slate-50/50">
@@ -947,7 +1144,7 @@ export default function AttendancePage() {
 
       {/* Attendance Correction Dialog */}
       <Dialog open={correctModalOpen} onOpenChange={setCorrectModalOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[85vh] overflow-y-auto w-[calc(100%-2rem)] sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>
               {selectedAttRecord?.isSynthetic ? 'Record Attendance / Manual Punch' : 'Manual Attendance Correction'}
@@ -980,7 +1177,7 @@ export default function AttendancePage() {
                 </Select>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-2">
                   <Label>Check-In (HH:mm)</Label>
                   <Input
@@ -1009,11 +1206,11 @@ export default function AttendancePage() {
                 />
               </div>
 
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setCorrectModalOpen(false)}>
+              <DialogFooter className="pt-2 flex flex-col-reverse sm:flex-row gap-2">
+                <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => setCorrectModalOpen(false)}>
                   Cancel
                 </Button>
-                <Button type="submit" className="bg-indigo-600 hover:bg-indigo-700">
+                <Button type="submit" className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700">
                   {selectedAttRecord.isSynthetic ? 'Save & Record Punch' : 'Save & Log Correction'}
                 </Button>
               </DialogFooter>
@@ -1024,7 +1221,7 @@ export default function AttendancePage() {
 
       {/* Leave Rejection Dialog */}
       <Dialog open={rejectModalOpen} onOpenChange={setRejectModalOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[85vh] overflow-y-auto w-[calc(100%-2rem)] sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Reject Leave Application</DialogTitle>
           </DialogHeader>
@@ -1044,11 +1241,11 @@ export default function AttendancePage() {
                   required
                 />
               </div>
-              <DialogFooter className="pt-2">
-                <Button type="button" variant="outline" onClick={() => setRejectModalOpen(false)}>
+              <DialogFooter className="pt-2 flex flex-col-reverse sm:flex-row gap-2">
+                <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => setRejectModalOpen(false)}>
                   Cancel
                 </Button>
-                <Button type="submit" variant="destructive">
+                <Button type="submit" variant="destructive" className="w-full sm:w-auto">
                   Confirm Rejection
                 </Button>
               </DialogFooter>

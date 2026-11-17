@@ -11,6 +11,7 @@ import {
   AlertTriangle,
   Info,
   X,
+  Menu,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { useNotificationStore } from '@/stores/notificationStore';
@@ -19,7 +20,11 @@ import { getInitials, formatDate } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 
-export function Header() {
+interface HeaderProps {
+  onToggleMobileMenu?: () => void;
+}
+
+export function Header({ onToggleMobileMenu }: HeaderProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { currentUser: user, logout } = useAuthStore();
@@ -80,36 +85,54 @@ export function Header() {
   const breadcrumbs = generateBreadcrumbs();
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b border-slate-200 bg-white px-6">
-      <div className="flex items-center text-sm text-slate-500">
-        {breadcrumbs.map((crumb, index) => (
-          <React.Fragment key={crumb.path}>
-            {index > 0 && <ChevronRight className="mx-2 h-4 w-4 text-slate-400" />}
-            {index === breadcrumbs.length - 1 ? (
-              <span className="font-semibold text-slate-900">{crumb.name}</span>
-            ) : (
-              <Link to={crumb.path} className="hover:text-indigo-600 transition-colors">
-                {crumb.name}
-              </Link>
-            )}
-          </React.Fragment>
-        ))}
+    <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b border-slate-200 bg-white px-3 sm:px-6">
+      <div className="flex items-center">
+        {/* Mobile Hamburger Menu Button */}
+        <button
+          type="button"
+          onClick={onToggleMobileMenu}
+          className="mr-2 sm:mr-3 flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 md:hidden transition-colors"
+          aria-label="Toggle navigation menu"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+
+        {/* Desktop Breadcrumbs */}
+        <div className="hidden sm:flex items-center text-sm text-slate-500">
+          {breadcrumbs.map((crumb, index) => (
+            <React.Fragment key={crumb.path}>
+              {index > 0 && <ChevronRight className="mx-2 h-4 w-4 text-slate-400" />}
+              {index === breadcrumbs.length - 1 ? (
+                <span className="font-semibold text-slate-900">{crumb.name}</span>
+              ) : (
+                <Link to={crumb.path} className="hover:text-indigo-600 transition-colors">
+                  {crumb.name}
+                </Link>
+              )}
+            </React.Fragment>
+          ))}
+        </div>
+
+        {/* Mobile Page Title */}
+        <div className="flex sm:hidden items-center text-sm font-semibold text-slate-900 truncate max-w-[130px]">
+          {breadcrumbs[breadcrumbs.length - 1]?.name || 'FlowPay'}
+        </div>
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-1.5 sm:gap-3">
         {/* Global Search Bar */}
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
-            placeholder="Search employee or ID..."
+            placeholder="Search..."
             value={searchQuery}
             onChange={(e) => {
               setSearchQuery(e.target.value);
               setShowSearchResults(true);
             }}
             onFocus={() => setShowSearchResults(true)}
-            className="h-9 w-[220px] rounded-md border border-slate-200 bg-slate-50 pl-9 pr-3 text-xs focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            className="h-9 w-[110px] sm:w-[220px] rounded-md border border-slate-200 bg-slate-50 pl-8 sm:pl-9 pr-2 sm:pr-3 text-xs focus:border-indigo-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all"
           />
 
           {showSearchResults && searchResults.length > 0 && (
@@ -118,7 +141,7 @@ export function Header() {
                 className="fixed inset-0 z-10"
                 onClick={() => setShowSearchResults(false)}
               />
-              <div className="absolute left-0 top-11 z-20 w-72 rounded-md border border-slate-200 bg-white py-2 shadow-lg">
+              <div className="absolute right-0 sm:left-0 sm:right-auto top-11 z-20 w-72 max-w-[calc(100vw-2rem)] rounded-md border border-slate-200 bg-white py-2 shadow-lg">
                 <p className="px-3 pb-1 text-[11px] font-semibold uppercase text-slate-400">
                   Employees ({searchResults.length})
                 </p>
@@ -164,7 +187,7 @@ export function Header() {
                 className="fixed inset-0 z-10"
                 onClick={() => setShowNotifications(false)}
               />
-              <div className="absolute right-0 top-12 z-20 w-80 rounded-md border border-slate-200 bg-white shadow-xl">
+              <div className="absolute right-0 top-12 z-20 w-80 max-w-[calc(100vw-2rem)] rounded-md border border-slate-200 bg-white shadow-xl">
                 <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
                   <div className="flex items-center gap-1.5">
                     <span className="font-semibold text-slate-900 text-sm">Notifications</span>
@@ -244,7 +267,7 @@ export function Header() {
                 className="fixed inset-0 z-10"
                 onClick={() => setShowDropdown(false)}
               />
-              <div className="absolute right-0 top-12 z-20 w-52 rounded-md border border-slate-200 bg-white py-1 shadow-lg">
+              <div className="absolute right-0 top-12 z-20 w-52 max-w-[calc(100vw-2rem)] rounded-md border border-slate-200 bg-white py-1 shadow-lg">
                 <div className="px-4 py-2 border-b border-slate-100">
                   <p className="text-sm font-semibold text-slate-900 truncate">
                     {user?.name || 'User'}
