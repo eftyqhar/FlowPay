@@ -28,8 +28,18 @@ function convertMarkdownImagesToBase64(mdContent) {
   });
 }
 
+function cleanMarkdown(mdContent, isBangla = false) {
+  // Strip any remaining presenter notes / speaking scripts
+  if (isBangla) {
+    return mdContent.replace(/### প্রেজেন্টারের স্ক্রিপ্ট \(মুখে যা বলবেন\)[\s\S]*?(?=\n---|\n## স্লাইড|$)/gu, '');
+  } else {
+    return mdContent.replace(/### Presenter Notes \(What to Say\)[\s\S]*?(?=\n---|\n## Slide|$)/g, '');
+  }
+}
+
 function buildSlideHtml(markdown, isBangla = false) {
-  const processedMd = convertMarkdownImagesToBase64(markdown);
+  const cleanedMd = cleanMarkdown(markdown, isBangla);
+  const processedMd = convertMarkdownImagesToBase64(cleanedMd);
 
   // Match English digits or Bengali digits (০-৯)
   const slideRegex = isBangla ? /(?=## স্লাইড [0-9০-৯]+:)/u : /(?=## Slide \d+:)/g;
@@ -71,18 +81,20 @@ function buildSlideHtml(markdown, isBangla = false) {
     <html lang="${isBangla ? 'bn' : 'en'}">
     <head>
       <meta charset="UTF-8">
-      <title>${isBangla ? 'ফ্লোপে প্রেজেন্টেশন' : 'FlowPay Enterprise Presentation'}</title>
+      <title>${isBangla ? 'ফ্লোপে প্রেজেন্টেশন (A4)' : 'FlowPay Presentation (A4)'}</title>
       <style>
         @page {
-          size: 16in 9in;
+          size: A4 landscape;
           margin: 0;
         }
         *, *::before, *::after {
           box-sizing: border-box;
         }
-        body {
+        html, body {
           margin: 0;
           padding: 0;
+          width: 297mm;
+          height: auto;
           font-family: ${fontStack};
           background-color: #0f172a;
           color: #1e293b;
@@ -90,9 +102,9 @@ function buildSlideHtml(markdown, isBangla = false) {
           print-color-adjust: exact;
         }
         .slide {
-          width: 16in;
-          height: 9in;
-          padding: 0.5in 0.8in;
+          width: 297mm;
+          height: 210mm;
+          padding: 10mm 15mm;
           background: #ffffff;
           page-break-after: always;
           display: flex;
@@ -105,36 +117,37 @@ function buildSlideHtml(markdown, isBangla = false) {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          padding-bottom: 0.2in;
+          padding-bottom: 2mm;
           border-bottom: 2px solid #e2e8f0;
+          height: 12mm;
         }
         .brand {
           display: flex;
           align-items: center;
-          gap: 12px;
+          gap: 10px;
         }
         .logo-box {
           background: #4f46e5;
           color: #ffffff;
           font-weight: 800;
-          font-size: 16px;
-          padding: 6px 10px;
-          border-radius: 8px;
-          letter-spacing: 1px;
+          font-size: 14px;
+          padding: 4px 8px;
+          border-radius: 6px;
+          letter-spacing: 0.5px;
         }
         .brand-text {
-          font-size: 20px;
+          font-size: 17px;
           font-weight: 700;
           color: #0f172a;
-          letter-spacing: -0.5px;
+          letter-spacing: -0.3px;
         }
         .slide-badge {
           background: #eef2ff;
           color: #4338ca;
           font-weight: 700;
-          font-size: 14px;
-          padding: 6px 14px;
-          border-radius: 20px;
+          font-size: 12px;
+          padding: 4px 12px;
+          border-radius: 16px;
           border: 1px solid #c7d2fe;
           text-transform: uppercase;
         }
@@ -143,94 +156,87 @@ function buildSlideHtml(markdown, isBangla = false) {
           display: flex;
           flex-direction: column;
           justify-content: flex-start;
-          padding-top: 0.2in;
+          padding-top: 3mm;
           overflow: hidden;
         }
         .slide-body h1, .slide-body h2 {
-          font-size: 26px;
+          font-size: 21px;
           font-weight: 800;
           color: #1e1b4b;
           margin-top: 0;
-          margin-bottom: 12px;
-          border-left: 6px solid #4f46e5;
-          padding-left: 14px;
+          margin-bottom: 3mm;
+          border-left: 5px solid #4f46e5;
+          padding-left: 10px;
+          line-height: 1.25;
         }
         .slide-body h3 {
-          font-size: 18px;
+          font-size: 15px;
           font-weight: 700;
           color: #334155;
-          margin-top: 8px;
-          margin-bottom: 6px;
+          margin-top: 2.5mm;
+          margin-bottom: 1.5mm;
         }
         .slide-body p, .slide-body li {
-          font-size: 15px;
-          line-height: 1.5;
-          color: #334155;
+          font-size: 13.5px;
+          line-height: 1.45;
+          color: #1e293b;
         }
         .slide-body ul {
-          margin: 6px 0;
-          padding-left: 24px;
+          margin: 1.5mm 0;
+          padding-left: 20px;
         }
         .slide-body li {
-          margin-bottom: 4px;
+          margin-bottom: 2mm;
         }
+        .slide-body strong {
+          color: #0f172a;
+        }
+        /* LARGE PROMINENT SCREENSHOTS */
         .slide-body img {
-          max-width: 90%;
-          max-height: 3.5in;
+          max-width: 95%;
+          max-height: 125mm;
           object-fit: contain;
-          border-radius: 10px;
-          border: 1px solid #cbd5e1;
-          box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
-          margin: 8px 0;
+          border-radius: 8px;
+          border: 1.5px solid #cbd5e1;
+          box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.12), 0 4px 8px -2px rgba(0, 0, 0, 0.08);
+          margin: 3mm auto;
+          display: block;
         }
         .slide-body table {
           width: 100%;
           border-collapse: collapse;
-          margin: 8px 0;
-          font-size: 14px;
+          margin: 2.5mm 0;
+          font-size: 13px;
         }
         .slide-body th, .slide-body td {
-          border: 1px solid #e2e8f0;
-          padding: 8px 12px;
+          border: 1px solid #cbd5e1;
+          padding: 6px 10px;
           text-align: left;
         }
         .slide-body th {
-          background: #f8fafc;
+          background: #f1f5f9;
           font-weight: 700;
           color: #0f172a;
-        }
-        .slide-body blockquote {
-          background: #fffbeb;
-          border-left: 5px solid #f59e0b;
-          padding: 10px 16px;
-          margin: 8px 0 0 0;
-          border-radius: 0 8px 8px 0;
-          font-style: italic;
-          color: #78350f;
-          font-size: 14px;
-          line-height: 1.5;
-        }
-        .slide-body blockquote strong {
-          color: #92400e;
         }
         .slide-body pre {
           background: #0f172a;
           color: #f8fafc;
           padding: 8px 12px;
-          border-radius: 8px;
-          font-size: 13px;
+          border-radius: 6px;
+          font-size: 12px;
           overflow-x: auto;
-          margin: 6px 0;
+          margin: 2.5mm 0;
         }
         .slide-footer {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          padding-top: 0.15in;
+          padding-top: 2mm;
           border-top: 1px solid #e2e8f0;
-          font-size: 13px;
+          font-size: 11px;
           font-weight: 600;
           color: #94a3b8;
+          height: 8mm;
         }
       </style>
     </head>
@@ -254,7 +260,7 @@ function buildDocumentHtml(markdown, title) {
       <style>
         @page {
           size: A4 portrait;
-          margin: 20mm 18mm 22mm 18mm;
+          margin: 18mm 16mm 20mm 16mm;
           @bottom-right {
             content: counter(page);
           }
@@ -262,46 +268,46 @@ function buildDocumentHtml(markdown, title) {
         body {
           font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
           color: #1e293b;
-          line-height: 1.6;
-          font-size: 13px;
+          line-height: 1.55;
+          font-size: 12.5px;
           margin: 0;
           padding: 0;
         }
         h1 {
-          font-size: 24px;
+          font-size: 22px;
           color: #1e1b4b;
-          border-bottom: 3px solid #4f46e5;
-          padding-bottom: 8px;
+          border-bottom: 2.5px solid #4f46e5;
+          padding-bottom: 6px;
           margin-top: 0;
         }
         h2 {
-          font-size: 18px;
+          font-size: 17px;
           color: #312e81;
           border-bottom: 1px solid #e2e8f0;
-          padding-bottom: 6px;
-          margin-top: 24px;
+          padding-bottom: 5px;
+          margin-top: 20px;
           page-break-after: avoid;
         }
         h3 {
-          font-size: 15px;
+          font-size: 14px;
           color: #4338ca;
-          margin-top: 16px;
+          margin-top: 14px;
           page-break-after: avoid;
         }
         p, li {
           color: #334155;
-          font-size: 12.5px;
+          font-size: 12px;
         }
         table {
           width: 100%;
           border-collapse: collapse;
-          margin: 12px 0;
-          font-size: 11.5px;
+          margin: 10px 0;
+          font-size: 11px;
           page-break-inside: avoid;
         }
         th, td {
           border: 1px solid #cbd5e1;
-          padding: 6px 10px;
+          padding: 5px 8px;
           text-align: left;
         }
         th {
@@ -311,7 +317,7 @@ function buildDocumentHtml(markdown, title) {
         code {
           background: #f1f5f9;
           color: #4338ca;
-          padding: 2px 5px;
+          padding: 2px 4px;
           border-radius: 4px;
           font-family: Consolas, monospace;
           font-size: 11px;
@@ -319,37 +325,25 @@ function buildDocumentHtml(markdown, title) {
         pre {
           background: #0f172a;
           color: #f8fafc;
-          padding: 10px 14px;
+          padding: 8px 12px;
           border-radius: 6px;
-          font-size: 11.5px;
+          font-size: 11px;
           overflow-x: auto;
           page-break-inside: avoid;
         }
-        pre code {
-          background: transparent;
-          color: inherit;
-          padding: 0;
-        }
-        blockquote {
-          background: #eff6ff;
-          border-left: 4px solid #3b82f6;
-          margin: 12px 0;
-          padding: 8px 14px;
-          color: #1e40af;
-          font-size: 12px;
-        }
         img {
-          max-width: 95%;
+          max-width: 90%;
           height: auto;
           border-radius: 6px;
           border: 1px solid #cbd5e1;
-          margin: 10px 0;
+          margin: 8px auto;
+          display: block;
           page-break-inside: avoid;
         }
         hr {
           border: none;
           border-top: 1px solid #e2e8f0;
-          margin: 20px 0;
+          margin: 16px 0;
         }
       </style>
     </head>
@@ -375,8 +369,8 @@ async function renderPdf(html, outputPath, isPresentation = true) {
     await page.pdf({
       path: outputPath,
       printBackground: true,
-      width: '16in',
-      height: '9in',
+      format: 'A4',
+      landscape: true,
       preferCSSPageSize: true
     });
   } else {
@@ -384,7 +378,7 @@ async function renderPdf(html, outputPath, isPresentation = true) {
       path: outputPath,
       printBackground: true,
       format: 'A4',
-      margin: { top: '20mm', bottom: '22mm', left: '18mm', right: '18mm' }
+      margin: { top: '18mm', bottom: '20mm', left: '16mm', right: '16mm' }
     });
   }
 
@@ -393,7 +387,7 @@ async function renderPdf(html, outputPath, isPresentation = true) {
 }
 
 async function main() {
-  // 1. English Presentation (16:9 Landscape Presentation Slides)
+  // 1. English Presentation (A4 Landscape, Large Image, Large Text, No Speaking Script)
   if (fs.existsSync('PRESENTATION_EN.md')) {
     const enMd = fs.readFileSync('PRESENTATION_EN.md', 'utf8');
     const enHtml = buildSlideHtml(enMd, false);
@@ -401,7 +395,7 @@ async function main() {
     await renderPdf(enHtml, 'FlowPay_Presentation_English.pdf', true);
   }
 
-  // 2. Bangla Presentation (16:9 Landscape Presentation Slides)
+  // 2. Bangla Presentation (A4 Landscape, Large Image, Large Text, No Speaking Script)
   if (fs.existsSync('PRESENTATION_BN.md')) {
     const bnMd = fs.readFileSync('PRESENTATION_BN.md', 'utf8');
     const bnHtml = buildSlideHtml(bnMd, true);
@@ -409,7 +403,7 @@ async function main() {
     await renderPdf(bnHtml, 'FlowPay_Presentation_Bangla.pdf', true);
   }
 
-  // 3. User Guide (A4 Printable Document)
+  // 3. User Guide (A4 Portrait)
   if (fs.existsSync('USER_GUIDE.md')) {
     const userGuideMd = fs.readFileSync('USER_GUIDE.md', 'utf8');
     const userGuideHtml = buildDocumentHtml(userGuideMd, 'FlowPay User Guide');
@@ -417,7 +411,7 @@ async function main() {
     await renderPdf(userGuideHtml, 'FlowPay_User_Guide.pdf', false);
   }
 
-  // 4. System Documentation (A4 Printable Technical Manual)
+  // 4. System Documentation (A4 Portrait)
   if (fs.existsSync('DOCUMENTATION.md')) {
     const docMd = fs.readFileSync('DOCUMENTATION.md', 'utf8');
     const docHtml = buildDocumentHtml(docMd, 'FlowPay System Architecture & Documentation');
@@ -425,7 +419,7 @@ async function main() {
     await renderPdf(docHtml, 'FlowPay_System_Documentation.pdf', false);
   }
 
-  console.log('All 4 PDFs generated successfully!');
+  console.log('All 4 PDFs regenerated successfully in A4 size!');
 }
 
 main().catch(err => {
