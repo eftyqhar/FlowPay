@@ -572,7 +572,7 @@ const htmlContent = `<!DOCTYPE html>
           <div class="cover-stat-label">লোকাল-ফার্স্ট ইনস্ট্যান্ট এক্সিকিউশন</div>
         </div>
         <div class="cover-stat-box">
-          <div class="cover-stat-val">30/30 Test</div>
+          <div class="cover-stat-val">48/48 Test</div>
           <div class="cover-stat-label">১০০% ভেরিফাইড অ্যালগরিদম</div>
         </div>
       </div>
@@ -927,7 +927,7 @@ const htmlContent = `<!DOCTYPE html>
 
         <div class="card slate">
           <div class="card-top">
-            <span class="card-title">📊 Recharts & XLSX</span>
+            <span class="card-title">📊 Recharts & ExcelJS</span>
             <span class="card-badge badge-amber">Analytics</span>
           </div>
           <p>ইন্টারেক্টিভ এরিয়া ও বার চার্ট প্রদর্শন এবং এক ক্লিকে এক্সেল স্প্রেডশীট (.xlsx) ফাইল এক্সপোর্ট করে।</p>
@@ -1913,7 +1913,7 @@ const htmlContent = `<!DOCTYPE html>
           </div>
           <ul>
             <li><strong>CSV Export:</strong> হালকা টেক্সট ফাইল, যা অন্য যেকোনো সফটওয়্যার বা ডেটাবেসে ইমপোর্ট করা যায়।</li>
-            <li><strong>Excel (.xlsx) Export:</strong> <code>xlsx</code> লাইব্রেরি ব্যবহার করে আসল মাইক্রোসফট এক্সেল স্প্রেডশীট জেনারেট হয় যেখানে সূত্রসহ হিসাব করা যায়।</li>
+            <li><strong>Excel (.xlsx) Export:</strong> <code>exceljs</code> লাইব্রেরি ব্যবহার করে আসল মাইক্রোসফট এক্সেল স্প্রেডশীট জেনারেট হয়।</li>
             <li><strong>Print-Ready PDF:</strong> এক্সিকিউটিভ ও বোর্ড মিটিংয়ে উপস্থাপনের উপযোগী ফরম্যাট।</li>
           </ul>
         </div>

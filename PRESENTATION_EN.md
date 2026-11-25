@@ -76,24 +76,25 @@ flowchart LR
         Vite["Vite Build Tooling"]
         Tailwind["Tailwind CSS 3.4 (Responsive UI)"]
         Zustand["Zustand (Optimistic Multi-Store)"]
-        Charts["Recharts + SheetJS + jsPDF"]
+        Charts["Recharts + ExcelJS + jsPDF"]
     end
 
     subgraph Cloud ["Persistence & Security Layer (Supabase)"]
         Auth["Supabase Auth (JWT & Session Tokens)"]
-        Postgres[("PostgreSQL 15 (Relational DB)")]
-        RLS["Row-Level Security Policies"]
+        Edge["Supabase Edge Functions (create-user)"]
+        Postgres[("PostgreSQL 15 (11 Normalized Tables)")]
+        RLS["Row-Level Security, Triggers & Atomic RPCs"]
         Storage["Object Storage (Avatars & Docs)"]
     end
 
-    Client <--> |"RESTful API & WebSockets"| Cloud
+    Client <--> |"RESTful API, RPC & Edge Functions"| Cloud
 ```
 
 ### Technology Breakdown
 - **Frontend Framework**: React 18 with TypeScript 5 for type safety and runtime stability.
-- **State Architecture**: Decentralized Zustand stores providing instantaneous **Optimistic UI** updates with background PostgreSQL synchronization.
-- **Database Engine**: PostgreSQL 15 hosted on Supabase, enforcing foreign keys, unique period constraints, and cascading integrity.
-- **Reporting Engine**: SheetJS (`xlsx`) for bidirectional Excel workflows and `jsPDF` for client-side vector document rendering.
+- **State Architecture**: Decentralized Zustand stores providing instantaneous **Optimistic UI** updates with automatic state rollbacks on server error.
+- **Database Engine**: PostgreSQL 15 hosted on Supabase (11 relational tables including normalized `loan_repayments`), enforcing foreign keys, `CHECK` constraints, and atomic RPCs.
+- **Reporting Engine**: `ExcelJS` (`exceljs ^4.4.0`) for secure client-side `.xlsx` workbooks and `jsPDF` for vector payslip rendering.
 
 
 ---
@@ -105,8 +106,8 @@ flowchart LR
 
 ### Security Specifications
 - **Multi-Tier RBAC**: 5 strictly partitioned roles: `Owner`, `Admin`, `Accountant`, `HR`, and `Employee`.
-- **First Super Admin Bootstrap**: The first user to register on an empty instance is automatically elevated to `Owner`. All subsequent public signups strictly default to `Employee`.
-- **Database Row-Level Security (RLS)**: Even if API requests are manipulated on the client side, PostgreSQL policies block unauthorized reads and writes at the database layer.
+- **Server-Enforced Bootstrap & User Provisioning**: First account is elevated via `is_first_user()` RPC and `enforce_signup_role_security` DB trigger; Admin/Owner user creation executes via the `create-user` Edge Function (`service_role`) without hijacking the caller's session.
+- **Database Row-Level Security (RLS)**: Strict policies (`REVOKE ALL FROM anon`, `prevent_unauthorized_role_change` trigger) block unauthorized reads, writes, and role escalation at the database layer.
 
 ### Permissions Overview
 
@@ -127,10 +128,10 @@ graph TD
 ![FlowPay Executive Dashboard](docs/02_dashboard.png)
 
 ### Dashboard Capabilities
-- **Real-Time KPIs**: Total active headcount, monthly payroll expenditure, disbursed amounts, and pending approvals.
+- **Real-Time KPIs & Provident Fund Reserve**: Total active headcount, monthly payroll budget, disbursed amounts, pending approvals, and cumulative **Total Provident Fund (PF) Reserve** (Employee + Employer contributions).
 - **Dynamic Charting**: Monthly salary expense trajectory via Recharts Area Charts and departmental cost allocation via Bar Charts.
 - **Action Queues**: Instant shortcuts for pending leave requests, unapproved loans, and unresolved attendance disputes.
-- **Adaptive Role Rendering**: When an employee logs in, the dashboard dynamically morphs into a personal portal showing their year-to-date earnings, recent attendance logs, and leave quotas.
+- **Adaptive Role Rendering**: When an employee logs in, the dashboard morphs into a personal portal showing their YTD earnings, **My Total Provident Fund (PF)** summary, recent attendance logs, and leave quotas.
 
 
 ---
@@ -235,7 +236,7 @@ flowchart TD
         AbsenceDed["Absence Penalties"]
         UnpaidDed["Unpaid Leave Deduction"]
         LateDed["Late Threshold Penalties"]
-        PF["Provident Fund (Employee 8.33%)"]
+        PF["Provident Fund (Configurable Employee %)"]
         Loan["Loan Installment"]
     end
 
@@ -263,7 +264,7 @@ flowchart TD
 1. **Discovery & Generation (`/payroll/generate`)**: Automated scanning pulls verified overtime hours, unexcused absence days, and active loan installments into draft records.
 2. **Audit & Adjustment**: Accountants review individual calculations and apply discretionary bonuses or adjustments.
 3. **Batch Approval**: Executive management approves the batch with 1 click, transitioning records from `Draft` to `Approved`.
-4. **Disbursement**: Selecting payment channels (Bank Transfer, bKash, Nagad, Cash), stamping transaction reference numbers (`TXN-REF`), and marking records as `Paid`.
+4. **Atomic Disbursement (`disburse_payroll_batch` RPC)**: Selecting payment channels (Bank Transfer, bKash, Nagad, Cash), stamping transaction reference numbers (`TXN-REF`), and atomically marking approved records `Paid` while inserting normalized `loan_repayments` inside a single PostgreSQL transaction with `FOR UPDATE` row locks.
 
 
 ---
@@ -288,7 +289,7 @@ flowchart TD
 ![FlowPay Financial Reports](docs/08_reports.png)
 
 ### Export Capabilities
-- **Bank Transfer Schedules**: Export clean, structured Excel (`.xlsx`) and CSV sheets ready for batch bank upload.
+- **Bank Transfer Schedules**: Export clean, styled Excel (`.xlsx`) workbooks via `ExcelJS` and RFC-4180 UTF-8 BOM CSV sheets ready for batch bank upload.
 - **Departmental Allocation**: Visual breakdown of total human capital investment per department.
 - **Annual Fiscal Review**: 12-month gross versus net salary expenditure charts for executive forecasting.
 
@@ -302,33 +303,31 @@ flowchart TD
 | Security Dimension | Technical Implementation |
 | :--- | :--- |
 | **Audit Logging** | Every sensitive action (salary change, leave decision, payment disbursement) is written to `public.audit_logs`. |
-| **Data Protection** | Encrypted transport via SSL/TLS and bcrypt password hashing via Supabase Auth. |
-| **SQL Injection Prevention** | Fully parameterized SQL queries through Supabase JS SDK and PostgreSQL prepared statements. |
-| **Session Integrity** | Short-lived JSON Web Tokens (JWT) with automatic refresh token rotation. |
+| **Data Protection & Edge Isolation** | Encrypted transport via SSL/TLS, `create-user` Edge Function (`service_role` server-side), and strict Vercel security headers (`vercel.json`). |
+| **SQL Injection & Anon Prevention** | Parameterized SQL queries, PostgreSQL prepared RPCs, and `REVOKE ALL FROM anon` across all operational tables. |
+| **Session Integrity** | Short-lived JWT tokens with auth-gated data hydration (`MainLayout.tsx`) and fail-closed access checks. |
 
 
 ---
 
 ## Slide 16: Automated Quality Assurance & Verification
 
-### Test Suite Execution Summary
+### Test Suite & Static Analysis Summary
 
 ```bash
-# Executing financial calculation unit tests
+# Executing full Vitest regression suite (unit + audit + store rollbacks)
 npm test
-# Result: 30 / 30 assertions passing (100% success rate)
+# Result: 48 / 48 tests passing across 3 suites (100% success rate)
 
-# Executing architectural security & audit validation
-npx tsx tests/auditValidation.test.ts
-# Result: 9 / 9 integration assertions passing
+# Executing ESLint static code quality verification
+npm run lint
+# Result: 0 errors, 0 warnings
 ```
 
 ### Key Scenarios Covered:
-- Standard 22-day working cycle salary derivation.
-- Overtime multiplier scaling across fractional hours.
-- Prevention of duplicate absence and unpaid leave deductions.
-- Loan amortization installment capping at remaining balance.
-- Floor safeguards guaranteeing that Net Salary never yields negative values.
+- `tests/payrollCalculations.test.ts` (33 tests): 22-day cycle math, fractional overtime, configurable PF percentages & `calculateProvidentFundSummary()`.
+- `tests/auditValidation.test.ts` (9 tests): Single-deduction verification, late threshold penalties, half-day deductions, and zero-floor net salary guard.
+- `tests/stores.test.ts` (6 tests): Mocked Supabase failure rollbacks for payroll, employee, and loan stores.
 
 
 ---
@@ -336,10 +335,10 @@ npx tsx tests/auditValidation.test.ts
 ## Slide 17: Production Deployment & System Scalability
 
 ### Operational Topology
-- **Continuous Integration / Continuous Deployment**: Automated build verification with Vite Rollup optimization.
-- **Database Scalability**: PostgreSQL connection pooling handled via Supabase Transaction Pooler (`aws-0-ap-southeast-1.pooler.supabase.com:5432`).
-- **Zero-Downtime Schema Migrations**: Managed via idempotent migration scripts (`scripts/migrate.js`).
-- **Responsive PWA Readiness**: Adaptive layouts optimized for both 4K desktop command centers and mobile smartphone viewports.
+- **Optimized Production Bundling**: Vite Rollup `manualChunks` (`vendor-react`, `vendor-supabase`, `vendor-charts`, `vendor-pdf`, `vendor-excel`, `vendor-ui`) hosted on Vercel with strict HTTP security headers.
+- **Database Scalability**: 11 PostgreSQL tables with 5 performance indexes, sequential atomic `emp_id_seq`, and connection pooling on Supabase.
+- **Incremental SQL Migrations**: Non-destructive timestamped migrations (`supabase/migrations/202611250001..0003`) applied via `DATABASE_URL` with TLS verification (`scripts/migrate.js`).
+- **Responsive Design**: Adaptive layouts optimized for both widescreen desktop command centers and mobile smartphone viewports.
 
 
 ---

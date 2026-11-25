@@ -2,6 +2,7 @@ import puppeteer from 'puppeteer-core';
 import fs from 'fs';
 import path from 'path';
 import { marked } from 'marked';
+import { THESIS_SVGS } from './thesisDiagrams.js';
 
 const EDGE_PATH = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
 
@@ -247,8 +248,51 @@ function buildSlideHtml(markdown, isBangla = false) {
   `;
 }
 
-function buildDocumentHtml(markdown, title) {
-  const processedMd = convertMarkdownImagesToBase64(markdown);
+function formatMathBlocks(mdContent) {
+  let out = mdContent.replace(/\$\$([\s\S]*?)\$\$/g, (_, tex) => {
+    const clean = tex
+      .replace(/\\text\{([^}]*)\}/g, '$1')
+      .replace(/\\frac\{([^}]*)\}\{([^}]*)\}/g, '($1) / ($2)')
+      .replace(/\\lfloor\s*/g, 'floor(')
+      .replace(/\s*\\rfloor/g, ')')
+      .replace(/\\left\(/g, '(')
+      .replace(/\\right\)/g, ')')
+      .replace(/\\sum\s*/g, 'Σ ')
+      .replace(/\\max/g, 'max')
+      .replace(/\\cdot/g, '×')
+      .replace(/\\times/g, '×')
+      .replace(/\\epsilon/g, 'ε')
+      .replace(/\\qquad/g, '   |   ')
+      .replace(/\\,/g, ' ')
+      .replace(/\\%/g, '%')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return `\n<div class="math-block"><code>${clean}</code></div>\n`;
+  });
+  out = out.replace(/\$([A-Za-z0-9_\\{}]+)\$/g, (_, inner) => {
+    return `<code>${inner.replace(/\\ge/g, '≥').replace(/\\le/g, '≤')}</code>`;
+  });
+  return out;
+}
+
+function replaceThesisMermaidWithSvgs(mdContent) {
+  let idx = 0;
+  return mdContent.replace(/```mermaid[\s\S]*?```/g, (block) => {
+    if (idx < THESIS_SVGS.length) {
+      const svg = THESIS_SVGS[idx];
+      idx += 1;
+      return `\n${svg}\n`;
+    }
+    return block;
+  });
+}
+
+function buildDocumentHtml(markdown, title, isThesis = false) {
+  let processedMd = convertMarkdownImagesToBase64(markdown);
+  if (isThesis) {
+    processedMd = replaceThesisMermaidWithSvgs(processedMd);
+  }
+  processedMd = formatMathBlocks(processedMd);
   const htmlContent = marked.parse(processedMd);
 
   return `
@@ -260,10 +304,7 @@ function buildDocumentHtml(markdown, title) {
       <style>
         @page {
           size: A4 portrait;
-          margin: 18mm 16mm 20mm 16mm;
-          @bottom-right {
-            content: counter(page);
-          }
+          margin: 20mm 16mm 22mm 16mm;
         }
         body {
           font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
@@ -272,6 +313,41 @@ function buildDocumentHtml(markdown, title) {
           font-size: 12.5px;
           margin: 0;
           padding: 0;
+        }
+        .page-break {
+          page-break-after: always;
+          break-after: page;
+        }
+        .title-page {
+          text-align: center;
+          padding-top: 12mm;
+        }
+        .title-page table {
+          text-align: left;
+          margin-top: 18px;
+        }
+        .diagram-box {
+          margin: 12px auto;
+          padding: 8px;
+          border: 1px solid #cbd5e1;
+          border-radius: 8px;
+          background: #ffffff;
+          text-align: center;
+          page-break-inside: avoid;
+        }
+        .math-block {
+          background: #f8fafc;
+          border-left: 3px solid #4f46e5;
+          padding: 7px 12px;
+          margin: 6px 0;
+          font-size: 11.5px;
+          page-break-inside: avoid;
+        }
+        .math-block code {
+          background: transparent;
+          color: #1e1b4b;
+          font-weight: 600;
+          font-size: 11.5px;
         }
         h1 {
           font-size: 22px;
@@ -354,7 +430,7 @@ function buildDocumentHtml(markdown, title) {
   `;
 }
 
-async function renderPdf(html, outputPath, isPresentation = true) {
+async function renderPdf(html, outputPath, isPresentation = true, isThesis = false) {
   console.log(`Generating PDF -> ${outputPath}...`);
   const browser = await puppeteer.launch({
     executablePath: EDGE_PATH,
@@ -378,7 +454,14 @@ async function renderPdf(html, outputPath, isPresentation = true) {
       path: outputPath,
       printBackground: true,
       format: 'A4',
-      margin: { top: '18mm', bottom: '20mm', left: '16mm', right: '16mm' }
+      margin: { top: '20mm', bottom: '22mm', left: '16mm', right: '16mm' },
+      displayHeaderFooter: isThesis,
+      headerTemplate: isThesis
+        ? '<div style="font-size:8px;color:#64748b;width:100%;text-align:right;padding:0 16mm;">FlowPay Enterprise — Final Year Project Thesis Report</div>'
+        : '<span></span>',
+      footerTemplate: isThesis
+        ? '<div style="font-size:8.5px;color:#64748b;width:100%;display:flex;justify-content:space-between;padding:0 16mm;"><span>Department of Computer Science &amp; Engineering</span><span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span></div>'
+        : '<span></span>'
     });
   }
 
@@ -389,7 +472,7 @@ async function renderPdf(html, outputPath, isPresentation = true) {
 async function main() {
   // 1. English Presentation (A4 Landscape, Large Image, Large Text, No Speaking Script)
   if (fs.existsSync('PRESENTATION_EN.md')) {
-    const enMd = fs.readFileSync('PRESENTATION_EN.md', 'utf8');
+    const enMd = formatMathBlocks(fs.readFileSync('PRESENTATION_EN.md', 'utf8'));
     const enHtml = buildSlideHtml(enMd, false);
     fs.writeFileSync('PRESENTATION_EN.html', enHtml);
     await renderPdf(enHtml, 'FlowPay_Presentation_English.pdf', true);
@@ -397,29 +480,44 @@ async function main() {
 
   // 2. Bangla Presentation (A4 Landscape, Large Image, Large Text, No Speaking Script)
   if (fs.existsSync('PRESENTATION_BN.md')) {
-    const bnMd = fs.readFileSync('PRESENTATION_BN.md', 'utf8');
+    const bnMd = formatMathBlocks(fs.readFileSync('PRESENTATION_BN.md', 'utf8'));
     const bnHtml = buildSlideHtml(bnMd, true);
     fs.writeFileSync('PRESENTATION_BN.html', bnHtml);
     await renderPdf(bnHtml, 'FlowPay_Presentation_Bangla.pdf', true);
+    if (fs.existsSync('public')) {
+      fs.copyFileSync('FlowPay_Presentation_Bangla.pdf', 'public/FlowPay_Presentation_Bangla.pdf');
+    }
   }
 
   // 3. User Guide (A4 Portrait)
   if (fs.existsSync('USER_GUIDE.md')) {
     const userGuideMd = fs.readFileSync('USER_GUIDE.md', 'utf8');
-    const userGuideHtml = buildDocumentHtml(userGuideMd, 'FlowPay User Guide');
+    const userGuideHtml = buildDocumentHtml(userGuideMd, 'FlowPay User Guide', false);
     fs.writeFileSync('USER_GUIDE.html', userGuideHtml);
-    await renderPdf(userGuideHtml, 'FlowPay_User_Guide.pdf', false);
+    await renderPdf(userGuideHtml, 'FlowPay_User_Guide.pdf', false, false);
   }
 
   // 4. System Documentation (A4 Portrait)
   if (fs.existsSync('DOCUMENTATION.md')) {
     const docMd = fs.readFileSync('DOCUMENTATION.md', 'utf8');
-    const docHtml = buildDocumentHtml(docMd, 'FlowPay System Architecture & Documentation');
+    const docHtml = buildDocumentHtml(docMd, 'FlowPay System Architecture & Documentation', false);
     fs.writeFileSync('DOCUMENTATION.html', docHtml);
-    await renderPdf(docHtml, 'FlowPay_System_Documentation.pdf', false);
+    await renderPdf(docHtml, 'FlowPay_System_Documentation.pdf', false, false);
   }
 
-  console.log('All 4 PDFs regenerated successfully in A4 size!');
+  // 5. Final Year Project Thesis Report (A4 Portrait + Embedded Vector Diagrams)
+  if (fs.existsSync('FINAL_YEAR_PROJECT_REPORT.md')) {
+    const thesisMd = fs.readFileSync('FINAL_YEAR_PROJECT_REPORT.md', 'utf8');
+    const thesisHtml = buildDocumentHtml(
+      thesisMd,
+      'FlowPay Enterprise — Final Year Project Thesis Report',
+      true
+    );
+    fs.writeFileSync('FINAL_YEAR_PROJECT_REPORT.html', thesisHtml);
+    await renderPdf(thesisHtml, 'FlowPay_FYP_Thesis_Report.pdf', false, true);
+  }
+
+  console.log('All 5 PDFs regenerated successfully in A4 size!');
 }
 
 main().catch(err => {

@@ -54,8 +54,8 @@ FlowPay provides fine-grained Role-Based Access Control (RBAC). When users log i
 
 ### 3.1 Accessing FlowPay
 - Open your web browser and navigate to the FlowPay address (e.g., `http://localhost:5173/` or your production domain).
-- **First Time Setup**: The very first user to register on a fresh FlowPay installation is automatically granted the **Owner** role. All subsequent registrations default to the **Employee** role.
-- **Demo Presets**: On the login screen, 5 preset buttons (`Owner`, `Admin`, `Accountant`, `HR`, `Employee`) allow instant 1-click testing with preloaded sample data.
+- **First Time Setup**: The very first user to register on a fresh FlowPay installation is automatically granted the **Owner** role. All subsequent public registrations default to the **Employee** role.
+- **Role-Based Account Creation**: Owners and Admins can provision new staff accounts directly inside **Settings -> Users & Roles** (handled securely via the `create-user` Edge Function).
 
 ### 3.2 The Navigation Layout
 - **Sidebar (Desktop)**: Located on the left side, providing instant navigation to Dashboard, Employees, Attendance, Payroll, Payslips, Loans, Reports, and Settings.
@@ -113,7 +113,7 @@ The employee onboarding form is organized into 5 logical sections:
      - **Medical Allowance**: 30% of Basic (`৳15,000`)
      - **Transport Allowance**: 20% of Basic (`৳10,000`)
    - You can manually override any allowance or add custom fixed bonuses.
-   - Toggle **Provident Fund (PF)** eligibility (default: 8.33% employee deduction + 8.33% employer contribution).
+   - Toggle **Provident Fund (PF)** eligibility (employee & employer contribution rates are configurable under **Settings -> Salary Rules**, and cumulative totals appear in both Employee and Executive Dashboards).
 4. **Banking & Payment Channel**:
    - Choose payment method: `Bank Transfer`, `Mobile Banking (bKash/Nagad/Rocket)`, `Cash`, or `Check`.
    - If Bank Transfer: Enter Bank Name, Account Number, and Routing Number.

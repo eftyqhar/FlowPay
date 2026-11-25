@@ -64,15 +64,16 @@ flowchart TD
         Router["Routing: React Router DOM v6"]
         State["State Management: Zustand Stores (Optimistic UI)"]
         Charts["Analytics & Charts: Recharts"]
-        Export["Document Generation: jsPDF + html2canvas + SheetJS (XLSX)"]
+        Export["Document Generation: jsPDF + html2canvas + ExcelJS"]
         Forms["Validation & Forms: React Hook Form + Zod"]
         Toast["Notifications: Sonner Toast Engine"]
     end
 
     subgraph Backend_Cloud ["Backend as a Service & Database (Supabase)"]
         Auth["Supabase Authentication (JWT & Sessions)"]
-        Postgres[("PostgreSQL 15 Database")]
-        RLS["Row-Level Security Policies & Triggers"]
+        Edge["Supabase Edge Functions (create-user)"]
+        Postgres[("PostgreSQL 15 Database (11 Normalized Tables)")]
+        RLS["Row-Level Security Policies, Triggers & Atomic RPCs"]
         Storage["Supabase Storage (Employee Documents & Avatars)"]
     end
 
@@ -93,13 +94,13 @@ flowchart TD
 | **Styling** | Tailwind CSS | `^3.4.4` | Utility-first responsive CSS, custom animations (`tailwindcss-animate`) |
 | **UI Primitives** | Radix UI | Latest | Accessible unstyled primitives (Dialog, Select, Tabs, Dropdown) |
 | **State Management**| Zustand | `^4.5.4` | Lightweight, scalable decentralized state with zero boilerplate |
-| **Database** | PostgreSQL on Supabase | 15.x | Relational storage, unique constraints, foreign keys, triggers |
-| **Backend & Auth** | Supabase JS | `^2.119.0` | Client-side PostgreSQL interface, session management, and RLS |
+| **Database** | PostgreSQL on Supabase | 15.x | 11 relational tables, foreign keys, `CHECK` constraints, triggers, atomic RPCs |
+| **Backend & Auth** | Supabase JS & Edge Functions | `^2.119.0` | Client-side PostgreSQL interface, JWT session management, RLS, and Deno Edge Functions |
 | **Charts** | Recharts | `^2.12.7` | Responsive SVG area, bar, and pie charts |
-| **Excel Export** | SheetJS (`xlsx`) | `^0.18.5` | Client-side spreadsheet generation (`.csv` and `.xlsx`) |
+| **Excel Export** | ExcelJS (`exceljs`) | `^4.4.0` | Secure client-side `.xlsx` workbook generation + RFC-4180 UTF-8 BOM CSV export |
 | **PDF Generation** | jsPDF + html2canvas | `^2.5.2` | DOM rasterization and vector PDF payslip rendering |
 | **Icons** | Lucide React | `^0.400.0` | Consistent, accessible iconography |
-| **Test Runner** | tsx | `^4.23.15` | Native TypeScript test runner for unit and audit tests |
+| **Testing & Linting** | Vitest + ESLint | `^2.1.8` / `^10.15.0` | Automated unit/integration/store test runner (`48/48`) and static code quality checks |
 
 ---
 
@@ -154,12 +155,13 @@ erDiagram
     EMPLOYEES ||--o{ ATTENDANCE_RECORDS : "punches"
     EMPLOYEES ||--o{ LEAVE_REQUESTS : "submits"
     EMPLOYEES ||--o{ LOANS : "applies"
+    LOANS ||--o{ LOAN_REPAYMENTS : "tracks"
     EMPLOYEES ||--o{ PAYROLL_RECORDS : "receives"
     USERS ||--o{ AUDIT_LOGS : "performed_by"
     USERS ||--o{ NOTIFICATIONS : "targeted_to"
 ```
 
-### 4.1 Schema Tables Reference
+### 4.1 Schema Tables Reference (11 PostgreSQL Tables)
 
 #### 1. `public.users`
 Stores user authentication profiles, application roles, and employee linkage.
@@ -250,7 +252,18 @@ Employee personal loans and salary advance accounts.
 - `status` (TEXT, NOT NULL, DEFAULT `'pending'`): `'pending'`, `'approved'`, `'rejected'`, `'active'`, `'completed'`.
 - `applied_at`, `approved_at` (TIMESTAMPTZ).
 - `approved_by` (TEXT).
-- `repayments` (JSONB, DEFAULT `'[]'`): `[ { id, date, amount, payrollRecordId, month, year } ]`.
+- `repayments` (JSONB, DEFAULT `'[]'`): Legacy mirror; canonical repayment entries live in `public.loan_repayments`.
+
+#### 5a. `public.loan_repayments`
+Normalized child ledger tracking every payroll installment deduction and early settlement against a loan.
+- `id` (TEXT, PK).
+- `loan_id` (TEXT, NOT NULL, FK -> `public.loans(id) ON DELETE CASCADE`).
+- `payroll_record_id` (TEXT): Linked payroll disbursement ID.
+- `amount` (NUMERIC, NOT NULL, CHECK `amount >= 0`).
+- `month` (INTEGER): Deduction month.
+- `year` (INTEGER): Deduction year.
+- `date` (TIMESTAMPTZ, DEFAULT `now()`).
+- *Constraint*: `uq_loan_repayments_loan_month_year` (`UNIQUE(loan_id, month, year) WHERE month IS NOT NULL AND year IS NOT NULL`).
 
 #### 6. `public.payroll_records`
 Computed monthly salary records for employees.
@@ -365,10 +378,10 @@ Manages session authentication, user accounts, and self-registration policies.
 | :--- | :--- | :--- |
 | `initAuth` | `() => Promise<void>` | Initializes session on app startup via `supabase.auth.getSession()`. Resolves linked `employee_id`, bootstraps missing profile in `public.users`, and registers `onAuthStateChange` listener. |
 | `login` | `(email, password) => Promise<{ success, message }>` | Authenticates credentials with Supabase Auth. Queries `public.users` to load the profile and linked `employeeId`. |
-| `signup` | `(email, password, name, role?) => Promise<{ success, message }>` | Registers a new account. Checks `public.users` count: if table is empty, bootstraps user as `'owner'`. Otherwise, strictly enforces `'employee'` role. Triggers automatic employee profile linking. |
+| `signup` | `(email, password, name, role?) => Promise<{ success, message }>` | Registers a new account. Queries `is_first_user()` RPC to bootstrap the initial account as `'owner'`, while `enforce_signup_role_security` DB trigger locks all subsequent public signups to `'employee'` and auto-links employee profile. |
 | `logout` | `() => Promise<void>` | Destroys Supabase session, resets `currentUser` and `isAuthenticated` to `false`. |
 | `fetchUsers` | `() => Promise<void>` | Retrieves all user records from `public.users` ordered by creation date. |
-| `addUser` | `(user, password?) => Promise<void>` | Admin-only function to manually create users via `supabase.auth.signUp` and insert record into `public.users`. |
+| `addUser` | `(user, password?) => Promise<void>` | Owner/Admin function that invokes the `create-user` Supabase Edge Function (server-side `service_role` Admin API) so user creation preserves the admin's active session. |
 | `updateUser` | `(id, updates) => Promise<void>` | Updates user properties (name, role, status, employeeId) in state and `public.users`. |
 | `deleteUser` | `(id) => Promise<void>` | Removes user from state and deletes row from `public.users`. |
 | `toggleUserStatus` | `(id) => Promise<void>` | Inverts `isActive` status (activates/deactivates access). |
@@ -429,7 +442,7 @@ Controls payroll generation wizards, batch approvals, salary disbursements, and 
 | `fetchPayroll` | `() => Promise<void>` | Retrieves all payroll records from `public.payroll_records` ordered by year/month. |
 | `generatePayroll` | `(month, year, employees, createdBy, replaceExisting?) => PayrollRecord[]` | Runs `calculateFullSalary` across all eligible employees, creates draft records, purges old drafts for the period, and syncs new drafts to Supabase. |
 | `approvePayroll` | `(ids, approvedBy) => void` | Batch updates draft records to `'approved'`, updates Supabase via `.in('id', ids)`, and dispatches notifications to employees. |
-| `markAsPaid` | `(ids, paidBy, paymentMethod, transactionRef?) => void` | Disburses approved payroll. Deducts loan installments via `loanStore.recordInstallmentDeduction`, stamps `paymentDate`, `transactionRef`, and marks records `'paid'`. |
+| `markAsPaid` | `(ids, paidBy, paymentMethod, transactionRef?) => void` | Executes `disburse_payroll_batch` atomic PostgreSQL RPC (`FOR UPDATE` row locks) to mark approved records `'paid'`, insert normalized `loan_repayments`, decrement loan balances, auto-complete settled loans, and rollback client state on failure. |
 | `updatePayrollRecord` | `(id, updates) => void` | Updates specific payroll adjustments (e.g., custom bonus or deduction) and recalculates totals. |
 | `deletePayrollRecord` | `(id) => void` | Deletes a draft payroll record from state and Supabase. |
 | `getPayrollByMonth` | `(month, year) => PayrollRecord[]` | Filters payroll records for a given month and year. |
@@ -565,8 +578,8 @@ $$\text{Net Salary} = \max(0, \text{Gross} - \text{Total Deductions})$$
 ### 7.1 Authentication (`LoginPage.tsx`)
 - **Route**: `/login`
 - **Access**: Public
-- **Features**: Dual-mode Sign In / Sign Up tabbed view. Remembers corporate credentials, displays password toggles, and provides demo login presets (Owner, Admin, Accountant, HR, Employee).
-- **Security Rule**: Enforces first-user Super Admin ('owner') bootstrap; all subsequent public signups default to 'employee'.
+- **Features**: Dual-mode Sign In / Sign Up tabbed view with corporate credential persistence, password visibility toggles, and fail-closed Supabase session handling.
+- **Security Rule**: Enforces first-user Super Admin ('owner') bootstrap via `is_first_user()` RPC and `enforce_signup_role_security` PostgreSQL trigger; all subsequent public signups are forced to `'employee'`.
 
 ---
 
@@ -574,8 +587,8 @@ $$\text{Net Salary} = \max(0, \text{Gross} - \text{Total Deductions})$$
 - **Route**: `/`
 - **Access**: All Authenticated Roles (Adaptive content by role)
 - **Features**:
-  - Executive KPI Cards: Total Active Employees, Monthly Payroll Budget, Disbursed Amount, Pending Actions.
-  - Role-specific view: Employees see their linked personal payslip summary, year-to-date earnings, and leave balances; Admins see company-wide metrics.
+  - Executive KPI Cards: Total Active Employees, Monthly Payroll Budget, Disbursed Amount, Pending Actions, and **Total Provident Fund (PF) Reserve** (Employee share + Employer match + Combined Fund across paid payroll runs).
+  - Role-specific view: Employees see their linked personal payslip summary, year-to-date earnings, **My Total Provident Fund (PF)** breakdown (personal contribution, employer match, and contribution months via `calculateProvidentFundSummary`), and leave balances; Admins see company-wide metrics.
   - Interactive Charts: Monthly payroll expense trend (Area Chart) and Departmental budget allocation (Bar Chart).
   - Quick Action Queue: Pending leave applications and loan requests with 1-click review shortcuts.
   - Real-time Attendance Summary: Today's present, late, on-leave, and absent counts.
@@ -689,7 +702,7 @@ $$\text{Net Salary} = \max(0, \text{Gross} - \text{Total Deductions})$$
 
 ### 7.9 System Settings & Administration
 - `CompanySettingsPage.tsx` (`/settings/company`): Corporate name, tax ID, currency, logo, working days.
-- `SalarySettingsPage.tsx` (`/settings/salary`): Overtime multiplier, daily working hours, weekly holiday, half-day deduction toggle, late arrival threshold rules, festival bonus rules, and decimal rounding configuration.
+- `SalarySettingsPage.tsx` (`/settings/salary`): Overtime multiplier, daily working hours, weekly holiday, half-day deduction toggle, late arrival threshold rules, festival bonus rules, **Provident Fund (PF) Employee & Employer contribution percentages (`pfEmployeePercent`, `pfEmployerPercent`, 0–50%)**, and decimal rounding configuration.
 - `UsersRolesPage.tsx` (`/settings/users`): RBAC user management, assigning roles (`Owner`, `Admin`, `Accountant`, `HR`, `Employee`), activating/deactivating accounts.
 - `AuditLogsPage.tsx` (`/settings/audit-logs`): Immutable audit trail search and filtering.
 
@@ -744,8 +757,8 @@ Provides bidirectional transformations between PostgreSQL `snake_case` database 
 - `rowToAudit` / `auditToRow`
 
 ### 9.2 `src/lib/export.ts`
-- `exportToCSV(data, filename)`: Converts JSON data to `.csv` via SheetJS.
-- `exportToExcel(data, filename, sheetName)`: Exports JSON data to `.xlsx`.
+- `exportToCSV(data, filename)`: Converts JSON data to RFC-4180 escaped `.csv` with UTF-8 BOM (`\uFEFF`) so currency symbols (`৳`) render cleanly in Microsoft Excel.
+- `exportToExcel(data, filename, sheetName)`: Asynchronously builds a styled `.xlsx` workbook via `ExcelJS` (`^4.4.0`).
 - `exportToPDF(elementId, filename)`: Rasterizes an HTML DOM node via `html2canvas` at 2x scale and writes a vector `.pdf` file via `jsPDF`.
 
 ### 9.3 `src/lib/imageUtils.ts`
@@ -763,27 +776,20 @@ Provides bidirectional transformations between PostgreSQL `snake_case` database 
 
 ## 10. Automated Test Suites & QA Verification
 
-FlowPay includes comprehensive automated test suites executed via `npx tsx`:
+FlowPay uses **Vitest** (`^2.1.8`) and **ESLint** (`^10.15.0`) to continuously validate salary math, security regressions, and Zustand store rollbacks:
 
 ```bash
-# Run payroll formulas unit test suite (30 assertions)
+# Run full automated Vitest suite (48 tests across 3 files)
 npm test
 
-# Run technical audit validation suite (9 assertions)
-npx tsx tests/auditValidation.test.ts
+# Run ESLint static analysis (0 errors, 0 warnings)
+npm run lint
 ```
 
-### Verified Test Scenarios:
-1. Basic-only salary calculation.
-2. Allowances aggregation (House Rent + Medical + Transport).
-3. Overtime pay calculation with fractional hours and multiplier verification.
-4. Single-deduction verification (prevents double absence deductions).
-5. Loan installment deduction capped at remaining balance.
-6. Provident Fund computation for employee and employer.
-7. Negative net salary prevention safeguard.
-8. Decimal rounding precision to 2 decimal places.
-9. Late arrival threshold penalties (e.g., 3 lates = 1 day deduction).
-10. Half-day deduction calculations (0.5 day rate).
+### Suite Breakdown (`48 / 48` Passing):
+1. `tests/payrollCalculations.test.ts` (**33 tests**): Basic-only salary, statutory allowances, fractional overtime, single-deduction absence logic, half-day & late-threshold deductions, loan installment capping, configurable Provident Fund & `calculateProvidentFundSummary()` aggregation, negative net salary floor safeguard, and `roundCurrency()` precision.
+2. `tests/auditValidation.test.ts` (**9 tests**): Audit regression checks (`AUDIT-BUG-01`, `AUDIT-CALC-02/03`, `AUDIT-LATE-01/02/03`, `AUDIT-HALF-01`, `AUDIT-LOAN-01`, `AUDIT-SAFE-01`).
+3. `tests/stores.test.ts` (**6 tests**): Zustand store integration and optimistic rollback regression tests against mocked Supabase errors (`payrollStore`, `employeeStore`, `loanStore`).
 
 ---
 
@@ -791,24 +797,28 @@ npx tsx tests/auditValidation.test.ts
 
 ### 11.1 Environment Configuration (`.env`)
 ```env
-VITE_SUPABASE_URL=https://hvjzwytvljmnnwqahpky.supabase.co
-VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
 ```
 
-### 11.2 Database Migration Execution
+### 11.2 Database Migrations & Edge Functions
 ```bash
-# Run PostgreSQL schema migration and RLS policies on Supabase
-node scripts/migrate.js
+# Apply incremental timestamped migrations (supabase/migrations/*.sql) via DATABASE_URL
+DATABASE_URL="postgres://postgres.[project]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres" node scripts/migrate.js
+
+# Deploy secure user provisioning Edge Function
+supabase functions deploy create-user
 ```
 
-### 11.3 Production Build
+### 11.3 Production Build & Hosting
 ```bash
-# Typecheck and bundle production assets
+# Typecheck, split vendor bundles (vite.config.ts manualChunks), and build for Vercel
 npm run build
 
 # Preview production build locally
 npm run preview
 ```
+Vercel deployment (`vercel.json`) enforces strict security headers (`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, and `Permissions-Policy`) alongside SPA rewrites.
 
 ---
 *FlowPay Enterprise Documentation • Updated November 2026*
