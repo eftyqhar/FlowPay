@@ -3,24 +3,33 @@ import { Employee, EmployeeDocument } from '@/lib/types';
 import { generateId } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { rowToEmployee, employeeToRow } from '@/lib/dbMappers';
+import { toast } from 'sonner';
 
 interface EmployeeState {
   employees: Employee[];
   isLoading: boolean;
   fetchEmployees: () => Promise<void>;
-  addEmployee: (employee: Omit<Employee, 'id' | 'createdAt' | 'updatedAt' | 'employeeId'>) => Employee;
-  updateEmployee: (id: string, updates: Partial<Employee>) => void;
-  deleteEmployee: (id: string) => void;
-  toggleEmployeeStatus: (id: string) => void;
-  addDocument: (employeeId: string, document: Omit<EmployeeDocument, 'id' | 'uploadDate'>) => void;
-  deleteDocument: (employeeId: string, documentId: string) => void;
-  deductLeaveBalance: (employeeId: string, leaveType: 'casual' | 'sick' | 'annual', days: number) => void;
-  updateDepartmentName: (oldName: string, newName: string) => void;
+  addEmployee: (
+    employee: Omit<Employee, 'id' | 'createdAt' | 'updatedAt' | 'employeeId'>
+  ) => Promise<Employee>;
+  updateEmployee: (id: string, updates: Partial<Employee>) => Promise<void>;
+  deleteEmployee: (id: string) => Promise<void>;
+  toggleEmployeeStatus: (id: string) => Promise<void>;
+  addDocument: (
+    employeeId: string,
+    document: Omit<EmployeeDocument, 'id' | 'uploadDate'>
+  ) => Promise<void>;
+  deleteDocument: (employeeId: string, documentId: string) => Promise<void>;
+  deductLeaveBalance: (
+    employeeId: string,
+    leaveType: 'casual' | 'sick' | 'annual',
+    days: number
+  ) => Promise<void>;
+  updateDepartmentName: (oldName: string, newName: string) => Promise<void>;
   getEmployeeById: (id: string) => Employee | undefined;
   getEmployeesByDepartment: (dept: string) => Employee[];
   getActiveEmployees: () => Employee[];
   searchEmployees: (query: string) => Employee[];
-  getNextEmployeeId: () => string;
 }
 
 export const useEmployeeStore = create<EmployeeState>((set, get) => ({
@@ -37,43 +46,50 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
 
       if (error) throw error;
       set({ employees: (data || []).map(rowToEmployee), isLoading: false });
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error fetching employees from Supabase:', err);
+      toast.error(err?.message || 'Failed to load employees');
       set({ isLoading: false });
     }
   },
 
-  addEmployee: (employeeData) => {
-    const newId = get().getNextEmployeeId();
+  addEmployee: async (employeeData) => {
     const now = new Date().toISOString();
-    const newEmployee: Employee = {
+    const draftEmployee: Employee = {
       ...employeeData,
       id: generateId(),
-      employeeId: newId,
+      // Leave employeeId empty so PostgreSQL emp_id_seq trigger generates EMP-XXXX atomically
+      employeeId: '',
       leaveBalance: employeeData.leaveBalance || { casual: 10, sick: 14, annual: 15 },
       documents: employeeData.documents || [],
       createdAt: now,
       updatedAt: now,
     };
 
-    // Update state optimistically
+    const { data, error } = await supabase
+      .from('employees')
+      .insert(employeeToRow(draftEmployee))
+      .select('*')
+      .single();
+
+    if (error || !data) {
+      const msg = error?.message || 'Failed to create employee in database';
+      toast.error(msg);
+      throw new Error(msg);
+    }
+
+    const createdEmployee = rowToEmployee(data);
     set((state) => ({
-      employees: [newEmployee, ...state.employees],
+      employees: [createdEmployee, ...state.employees],
     }));
 
-    // Sync with Supabase
-    supabase
-      .from('employees')
-      .insert(employeeToRow(newEmployee))
-      .then(({ error }) => {
-        if (error) console.error('Failed to sync new employee to Supabase:', error);
-      });
-
-    return newEmployee;
+    return createdEmployee;
   },
 
-  updateEmployee: (id, updates) => {
+  updateEmployee: async (id, updates) => {
+    const previousEmployees = get().employees;
     const now = new Date().toISOString();
+
     set((state) => ({
       employees: state.employees.map((emp) =>
         emp.id === id ? { ...emp, ...updates, updatedAt: now } : emp
@@ -81,39 +97,42 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
     }));
 
     const updatedEmp = get().employees.find((e) => e.id === id);
-    if (updatedEmp) {
-      supabase
-        .from('employees')
-        .update(employeeToRow(updatedEmp))
-        .eq('id', id)
-        .then(({ error }) => {
-          if (error) console.error('Failed to sync employee update to Supabase:', error);
-        });
+    if (!updatedEmp) return;
+
+    const { error } = await supabase
+      .from('employees')
+      .update(employeeToRow(updatedEmp))
+      .eq('id', id);
+
+    if (error) {
+      set({ employees: previousEmployees });
+      toast.error(`Failed to update employee: ${error.message}`);
+      throw new Error(error.message);
     }
   },
 
-  deleteEmployee: (id) => {
+  deleteEmployee: async (id) => {
+    const previousEmployees = get().employees;
     set((state) => ({
       employees: state.employees.filter((emp) => emp.id !== id),
     }));
 
-    supabase
-      .from('employees')
-      .delete()
-      .eq('id', id)
-      .then(({ error }) => {
-        if (error) console.error('Failed to delete employee from Supabase:', error);
-      });
+    const { error } = await supabase.from('employees').delete().eq('id', id);
+    if (error) {
+      set({ employees: previousEmployees });
+      toast.error(`Cannot delete employee: ${error.message}`);
+      throw new Error(error.message);
+    }
   },
 
-  toggleEmployeeStatus: (id) => {
+  toggleEmployeeStatus: async (id) => {
     const emp = get().employees.find((e) => e.id === id);
     if (!emp) return;
     const newStatus = emp.status === 'active' ? 'inactive' : 'active';
-    get().updateEmployee(id, { status: newStatus });
+    await get().updateEmployee(id, { status: newStatus });
   },
 
-  addDocument: (employeeId, documentData) => {
+  addDocument: async (employeeId, documentData) => {
     const emp = get().employees.find((e) => e.id === employeeId);
     if (!emp) return;
 
@@ -124,18 +143,18 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
     };
 
     const newDocs = [...(emp.documents || []), newDoc];
-    get().updateEmployee(employeeId, { documents: newDocs });
+    await get().updateEmployee(employeeId, { documents: newDocs });
   },
 
-  deleteDocument: (employeeId, documentId) => {
+  deleteDocument: async (employeeId, documentId) => {
     const emp = get().employees.find((e) => e.id === employeeId);
     if (!emp) return;
 
     const newDocs = (emp.documents || []).filter((doc) => doc.id !== documentId);
-    get().updateEmployee(employeeId, { documents: newDocs });
+    await get().updateEmployee(employeeId, { documents: newDocs });
   },
 
-  deductLeaveBalance: (employeeId, leaveType, days) => {
+  deductLeaveBalance: async (employeeId, leaveType, days) => {
     const emp = get().employees.find((e) => e.id === employeeId);
     if (!emp) return;
 
@@ -145,23 +164,29 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
       [leaveType]: Math.max(0, currentBalance[leaveType] - days),
     };
 
-    get().updateEmployee(employeeId, { leaveBalance: updatedBalance });
+    await get().updateEmployee(employeeId, { leaveBalance: updatedBalance });
   },
 
-  updateDepartmentName: (oldName, newName) => {
+  updateDepartmentName: async (oldName, newName) => {
+    const previousEmployees = get().employees;
+    const now = new Date().toISOString();
+
     set((state) => ({
       employees: state.employees.map((emp) =>
-        emp.department === oldName ? { ...emp, department: newName, updatedAt: new Date().toISOString() } : emp
+        emp.department === oldName ? { ...emp, department: newName, updatedAt: now } : emp
       ),
     }));
 
-    supabase
+    const { error } = await supabase
       .from('employees')
-      .update({ department: newName, updated_at: new Date().toISOString() })
-      .eq('department', oldName)
-      .then(({ error }) => {
-        if (error) console.error('Failed to update department in Supabase:', error);
-      });
+      .update({ department: newName, updated_at: now })
+      .eq('department', oldName);
+
+    if (error) {
+      set({ employees: previousEmployees });
+      toast.error(`Failed to update department name: ${error.message}`);
+      throw new Error(error.message);
+    }
   },
 
   getEmployeeById: (id) => {
@@ -190,21 +215,5 @@ export const useEmployeeStore = create<EmployeeState>((set, get) => ({
         emp.department.toLowerCase().includes(cleanQuery) ||
         emp.designation.toLowerCase().includes(cleanQuery)
     );
-  },
-
-  getNextEmployeeId: () => {
-    const currentEmployees = get().employees;
-    let maxNum = 0;
-    for (const emp of currentEmployees) {
-      const match = (emp.employeeId || '').match(/EMP-(\d+)/i);
-      if (match) {
-        const num = parseInt(match[1], 10);
-        if (!isNaN(num) && num > maxNum) {
-          maxNum = num;
-        }
-      }
-    }
-    const nextNum = maxNum + 1;
-    return `EMP-${String(nextNum).padStart(3, '0')}`;
   },
 }));

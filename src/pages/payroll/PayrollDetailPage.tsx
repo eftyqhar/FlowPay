@@ -92,45 +92,50 @@ export default function PayrollDetailPage() {
     );
   }
 
-  const handleApprove = () => {
+  const handleApprove = async () => {
     const approver = currentUser?.name || 'Admin';
-    approvePayroll([record.id], approver);
-    addLog({
-      userId: currentUser?.id || 'USR-002',
-      userName: approver,
-      action: 'Approve Payroll',
-      module: 'Payroll',
-      details: `Approved payroll for ${record.employeeName} (${getMonthName(record.month)} ${record.year})`,
-    });
-    toast.success('Payroll record approved successfully');
-  };
-
-  const handleConfirmDisbursement = () => {
-    const disburser = currentUser?.name || 'Accountant';
-    markAsPaid([record.id], disburser, paymentMethod, transactionRef);
-    addLog({
-      userId: currentUser?.id || 'USR-003',
-      userName: disburser,
-      action: 'Disburse Salary',
-      module: 'Payments',
-      details: `Disbursed ${record.employeeName}'s salary via ${paymentMethod} (Ref: ${transactionRef})`,
-    });
-    setPayModalOpen(false);
-    toast.success('Salary payment recorded and marked as paid');
-  };
-
-  const handleDeleteDraft = () => {
-    if (window.confirm(`Are you sure you want to delete this draft payroll for ${record.employeeName}?`)) {
-      deletePayrollRecord(record.id);
+    try {
+      await approvePayroll([record.id], approver);
       addLog({
-        userId: currentUser?.id || 'USR-001',
-        userName: currentUser?.name || 'Admin',
-        action: 'Delete Draft Payroll',
+        userId: currentUser?.id || 'USR-002',
+        userName: approver,
+        action: 'Approve Payroll',
         module: 'Payroll',
-        details: `Deleted draft payroll for ${record.employeeName} (${getMonthName(record.month)} ${record.year})`,
+        details: `Approved payroll for ${record.employeeName} (${getMonthName(record.month)} ${record.year})`,
       });
-      toast.success('Draft payroll record deleted');
-      navigate('/payroll');
+      toast.success('Payroll record approved successfully');
+    } catch {
+      // Error surfaced by store
+    }
+  };
+
+  const handleConfirmDisbursement = async () => {
+    const disburser = currentUser?.name || 'Accountant';
+    try {
+      await markAsPaid([record.id], disburser, paymentMethod, transactionRef);
+      setPayModalOpen(false);
+      toast.success('Salary payment recorded and marked as paid');
+    } catch {
+      // Error surfaced by store
+    }
+  };
+
+  const handleDeleteDraft = async () => {
+    if (window.confirm(`Are you sure you want to delete this draft payroll for ${record.employeeName}?`)) {
+      try {
+        await deletePayrollRecord(record.id);
+        addLog({
+          userId: currentUser?.id || 'USR-001',
+          userName: currentUser?.name || 'Admin',
+          action: 'Delete Draft Payroll',
+          module: 'Payroll',
+          details: `Deleted draft payroll for ${record.employeeName} (${getMonthName(record.month)} ${record.year})`,
+        });
+        toast.success('Draft payroll record deleted');
+        navigate('/payroll');
+      } catch {
+        // Error surfaced by store
+      }
     }
   };
 

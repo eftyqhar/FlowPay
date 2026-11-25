@@ -66,7 +66,7 @@ export interface Employee {
   overtime: number;
   deductions: number;
   tax: number;
-  bankInfo: BankInfo;
+  bankInfo?: BankInfo;
   paymentMethod?: PaymentMethod;
   mobileBankingInfo?: MobileBankingInfo;
   status: 'active' | 'inactive';

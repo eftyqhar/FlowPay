@@ -19,11 +19,9 @@ import {
 } from 'recharts';
 import { Download, CreditCard, CheckCircle2, Clock } from 'lucide-react';
 import { usePayrollStore } from '@/stores/payrollStore';
-import { useEmployeeStore } from '@/stores/employeeStore';
 import { formatCurrency, getMonthName, formatDate } from '@/lib/utils';
 import { DataTable } from '@/components/shared/DataTable';
 import { exportToExcel } from '@/lib/export';
-import { Badge } from '@/components/ui/badge';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 
 const STATUS_COLORS = { paid: '#10b981', pending: '#f59e0b', draft: '#64748b' };
@@ -31,7 +29,6 @@ const METHOD_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#3b82f6'];
 
 export default function PaymentReportPage() {
   const { payrollRecords: payrolls } = usePayrollStore();
-  const { employees } = useEmployeeStore();
 
   const [month, setMonth] = useState<string>('all');
   const [year, setYear] = useState<string>(new Date().getFullYear().toString());

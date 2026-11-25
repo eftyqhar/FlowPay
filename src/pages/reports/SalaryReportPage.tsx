@@ -24,14 +24,12 @@ import {
 } from 'recharts';
 import { Download, FileText, FileSpreadsheet, Search } from 'lucide-react';
 import { usePayrollStore } from '@/stores/payrollStore';
-import { useEmployeeStore } from '@/stores/employeeStore';
 import { useDepartmentStore } from '@/stores/departmentStore';
 import { formatCurrency, getMonthName } from '@/lib/utils';
 import { exportToCSV, exportToExcel, exportToPDF } from '@/lib/export';
 
 export default function SalaryReportPage() {
   const { payrollRecords: payrolls } = usePayrollStore();
-  const { employees } = useEmployeeStore();
   const { departments } = useDepartmentStore();
 
   const [month, setMonth] = useState<string>('all');

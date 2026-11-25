@@ -24,7 +24,6 @@ import {
   Clock,
   TrendingUp,
   PieChart as PieChartIcon,
-  BarChart as BarChartIcon,
   CalendarCheck,
   PiggyBank,
   AlertCircle,
@@ -35,8 +34,6 @@ import {
 import {
   AreaChart,
   Area,
-  BarChart,
-  Bar,
   PieChart,
   Pie,
   Cell,

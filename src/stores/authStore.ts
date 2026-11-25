@@ -98,12 +98,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             set({ currentUser: rowToUser(userProfile), isAuthenticated: true, isLoading: false });
           }
         } else {
-          set({ currentUser: null, isAuthenticated: false, isLoading: false });
+          set({ currentUser: null, users: [], isAuthenticated: false, isLoading: false });
         }
       });
 
-      // Fetch all users
-      get().fetchUsers();
+      // Fetch users only if authenticated
+      if (session?.user) {
+        get().fetchUsers();
+      }
     } catch (err) {
       console.error('Error initializing auth:', err);
       set({ isLoading: false });
@@ -173,19 +175,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({ isLoading: true });
       const cleanEmail = email.trim().toLowerCase();
 
-      // Enforce role security:
-      // If no users exist yet in public.users, bootstrap the first user as 'owner' (Super Admin).
-      // All subsequent user signups are strictly given the 'employee' role.
-      // Roles can only be changed by the Super Admin in Settings > Users.
+      // Enforce role security server-side via DB trigger, and check bootstrap status safely via RPC
       let assignedRole: UserRole = 'employee';
-      const { count, error: countError } = await supabase
-        .from('users')
-        .select('*', { count: 'exact', head: true });
-
-      if (!countError && (count === 0 || count === null)) {
+      const { data: isFirstUser, error: rpcError } = await supabase.rpc('is_first_user');
+      if (!rpcError && isFirstUser === true) {
         assignedRole = 'owner';
-      } else {
-        assignedRole = 'employee';
       }
 
       const { data, error } = await supabase.auth.signUp({
@@ -247,7 +241,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   logout: async () => {
     try {
       await supabase.auth.signOut();
-    } catch (e) {
+    } catch {
       // ignore
     }
     set({ currentUser: null, isAuthenticated: false });
@@ -264,24 +258,30 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   addUser: async (user: User, password?: string) => {
-    try {
-      const row = userToRow(user);
-      const { error } = await supabase.from('users').insert(row);
-      if (error) throw error;
-
-      if (password) {
-        supabase.auth.signUp({
-          email: user.email,
-          password,
-          options: { data: { name: user.name, role: user.role } },
-        }).catch((e) => console.log('Auth user sign up note:', e));
-      }
-
-      await get().fetchUsers();
-      await useEmployeeStore.getState().fetchEmployees();
-    } catch (err) {
-      console.error('Failed to add user:', err);
+    if (!password || password.length < 6) {
+      throw new Error('A password of at least 6 characters is required to create a user.');
     }
+
+    const { data, error } = await supabase.functions.invoke('create-user', {
+      body: {
+        email: user.email,
+        password,
+        name: user.name,
+        role: user.role,
+        employeeId: user.employeeId,
+        avatar: user.avatar,
+      },
+    });
+
+    if (error) {
+      throw new Error(error.message || 'Failed to invoke user provisioning function.');
+    }
+    if (data?.error) {
+      throw new Error(data.error);
+    }
+
+    await get().fetchUsers();
+    await useEmployeeStore.getState().fetchEmployees();
   },
 
   updateUser: async (id: string, updates: Partial<User>) => {

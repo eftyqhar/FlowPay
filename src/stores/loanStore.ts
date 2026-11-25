@@ -2,29 +2,32 @@ import { create } from 'zustand';
 import { LoanRecord, LoanRepayment } from '@/lib/types';
 import { generateId } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
-import { rowToLoan, loanToRow } from '@/lib/dbMappers';
+import { rowToLoan, loanToRow, loanRepaymentToRow } from '@/lib/dbMappers';
+import { toast } from 'sonner';
 
 interface LoanState {
   loans: LoanRecord[];
   isLoading: boolean;
   fetchLoans: () => Promise<void>;
-  applyLoan: (loanData: Omit<LoanRecord, 'id' | 'appliedAt' | 'remainingBalance' | 'status' | 'repayments'>) => LoanRecord;
-  approveLoan: (id: string, approvedBy: string) => void;
-  rejectLoan: (id: string) => void;
+  applyLoan: (
+    loanData: Omit<LoanRecord, 'id' | 'appliedAt' | 'remainingBalance' | 'status' | 'repayments'>
+  ) => Promise<LoanRecord>;
+  approveLoan: (id: string, approvedBy: string) => Promise<void>;
+  rejectLoan: (id: string) => Promise<void>;
   recordInstallmentDeduction: (
     employeeId: string,
     month: number,
     year: number,
     payrollRecordId: string,
     customAmount?: number
-  ) => number;
+  ) => Promise<number>;
   reverseInstallmentDeduction: (
     employeeId: string,
     month: number,
     year: number,
     payrollRecordId: string
-  ) => void;
-  settleEarly: (id: string) => void;
+  ) => Promise<void>;
+  settleEarly: (id: string) => Promise<void>;
   getActiveLoan: (employeeId: string) => LoanRecord | undefined;
   getLoansByEmployee: (employeeId: string) => LoanRecord[];
 }
@@ -38,18 +41,20 @@ export const useLoanStore = create<LoanState>((set, get) => ({
       set({ isLoading: true });
       const { data, error } = await supabase
         .from('loans')
-        .select('*')
+        .select('*, loan_repayments(*)')
         .order('applied_at', { ascending: false });
 
       if (error) throw error;
       set({ loans: (data || []).map(rowToLoan), isLoading: false });
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error fetching loans from Supabase:', err);
+      toast.error(err?.message || 'Failed to load loans');
       set({ isLoading: false });
     }
   },
 
-  applyLoan: (loanData) => {
+  applyLoan: async (loanData) => {
+    const previousLoans = get().loans;
     const newLoan: LoanRecord = {
       ...loanData,
       id: generateId(),
@@ -63,61 +68,62 @@ export const useLoanStore = create<LoanState>((set, get) => ({
       loans: [newLoan, ...state.loans],
     }));
 
-    supabase
-      .from('loans')
-      .insert(loanToRow(newLoan))
-      .then(({ error }) => {
-        if (error) console.error('Failed to sync loan to Supabase:', error);
-      });
+    const { error } = await supabase.from('loans').insert(loanToRow(newLoan));
+    if (error) {
+      set({ loans: previousLoans });
+      toast.error(`Failed to submit loan application: ${error.message}`);
+      throw new Error(error.message);
+    }
 
     return newLoan;
   },
 
-  approveLoan: (id, approvedBy) => {
+  approveLoan: async (id, approvedBy) => {
+    const previousLoans = get().loans;
     const approvedAt = new Date().toISOString();
+
     set((state) => ({
       loans: state.loans.map((l) =>
-        l.id === id
-          ? {
-              ...l,
-              status: 'active',
-              approvedBy,
-              approvedAt,
-            }
-          : l
+        l.id === id ? { ...l, status: 'active', approvedBy, approvedAt } : l
       ),
     }));
 
-    supabase
+    const { error } = await supabase
       .from('loans')
       .update({
         status: 'active',
         approved_by: approvedBy,
         approved_at: approvedAt,
       })
-      .eq('id', id)
-      .then(({ error }) => {
-        if (error) console.error('Failed to update loan approval in Supabase:', error);
-      });
+      .eq('id', id);
+
+    if (error) {
+      set({ loans: previousLoans });
+      toast.error(`Failed to approve loan: ${error.message}`);
+      throw new Error(error.message);
+    }
   },
 
-  rejectLoan: (id) => {
+  rejectLoan: async (id) => {
+    const previousLoans = get().loans;
+
     set((state) => ({
-      loans: state.loans.map((l) =>
-        l.id === id ? { ...l, status: 'rejected' } : l
-      ),
+      loans: state.loans.map((l) => (l.id === id ? { ...l, status: 'rejected' } : l)),
     }));
 
-    supabase
+    const { error } = await supabase
       .from('loans')
       .update({ status: 'rejected' })
-      .eq('id', id)
-      .then(({ error }) => {
-        if (error) console.error('Failed to update loan rejection in Supabase:', error);
-      });
+      .eq('id', id);
+
+    if (error) {
+      set({ loans: previousLoans });
+      toast.error(`Failed to reject loan: ${error.message}`);
+      throw new Error(error.message);
+    }
   },
 
-  recordInstallmentDeduction: (employeeId, month, year, payrollRecordId, customAmount) => {
+  recordInstallmentDeduction: async (employeeId, month, year, payrollRecordId, customAmount) => {
     const activeLoan = get().getActiveLoan(employeeId);
     if (!activeLoan) return 0;
 
@@ -144,6 +150,7 @@ export const useLoanStore = create<LoanState>((set, get) => ({
       payrollRecordId,
     };
 
+    const previousLoans = get().loans;
     const updatedRepayments = [...activeLoan.repayments, repayment];
     const newStatus = isCompleted ? 'completed' : 'active';
 
@@ -160,22 +167,36 @@ export const useLoanStore = create<LoanState>((set, get) => ({
       ),
     }));
 
-    supabase
+    const { error: repError } = await supabase
+      .from('loan_repayments')
+      .insert(loanRepaymentToRow(repayment, activeLoan.id));
+
+    if (repError) {
+      set({ loans: previousLoans });
+      toast.error(`Failed to record loan repayment: ${repError.message}`);
+      throw new Error(repError.message);
+    }
+
+    const { error: loanError } = await supabase
       .from('loans')
       .update({
         remaining_balance: newBalance,
         status: newStatus,
-        repayments: updatedRepayments,
       })
-      .eq('id', activeLoan.id)
-      .then(({ error }) => {
-        if (error) console.error('Failed to update loan deduction in Supabase:', error);
-      });
+      .eq('id', activeLoan.id);
+
+    if (loanError) {
+      // Compensating delete of the inserted repayment row
+      await supabase.from('loan_repayments').delete().eq('id', repayment.id);
+      set({ loans: previousLoans });
+      toast.error(`Failed to update loan balance: ${loanError.message}`);
+      throw new Error(loanError.message);
+    }
 
     return deductionAmount;
   },
 
-  reverseInstallmentDeduction: (employeeId, month, year, payrollRecordId) => {
+  reverseInstallmentDeduction: async (employeeId, month, year, payrollRecordId) => {
     const loan = get().loans.find(
       (l) =>
         l.employeeId === employeeId &&
@@ -194,6 +215,7 @@ export const useLoanStore = create<LoanState>((set, get) => ({
     );
     if (!matchedRepayment) return;
 
+    const previousLoans = get().loans;
     const restoredBalance = loan.remainingBalance + matchedRepayment.amount;
     const updatedRepayments = loan.repayments.filter((r) => r.id !== matchedRepayment.id);
     const newStatus = restoredBalance > 0 ? 'active' : loan.status;
@@ -211,23 +233,37 @@ export const useLoanStore = create<LoanState>((set, get) => ({
       ),
     }));
 
-    supabase
+    const { error: delError } = await supabase
+      .from('loan_repayments')
+      .delete()
+      .eq('id', matchedRepayment.id);
+
+    if (delError) {
+      set({ loans: previousLoans });
+      toast.error(`Failed to reverse loan repayment: ${delError.message}`);
+      throw new Error(delError.message);
+    }
+
+    const { error: updError } = await supabase
       .from('loans')
       .update({
         remaining_balance: restoredBalance,
         status: newStatus,
-        repayments: updatedRepayments,
       })
-      .eq('id', loan.id)
-      .then(({ error }) => {
-        if (error) console.error('Failed to reverse loan installment in Supabase:', error);
-      });
+      .eq('id', loan.id);
+
+    if (updError) {
+      set({ loans: previousLoans });
+      toast.error(`Failed to restore loan balance: ${updError.message}`);
+      throw new Error(updError.message);
+    }
   },
 
-  settleEarly: (id) => {
+  settleEarly: async (id) => {
     const loan = get().loans.find((l) => l.id === id);
     if (!loan) return;
 
+    const previousLoans = get().loans;
     const newRepayment: LoanRepayment = {
       id: generateId(),
       date: new Date().toISOString(),
@@ -249,17 +285,30 @@ export const useLoanStore = create<LoanState>((set, get) => ({
       ),
     }));
 
-    supabase
+    const { error: repError } = await supabase
+      .from('loan_repayments')
+      .insert(loanRepaymentToRow(newRepayment, id));
+
+    if (repError) {
+      set({ loans: previousLoans });
+      toast.error(`Failed to log settlement repayment: ${repError.message}`);
+      throw new Error(repError.message);
+    }
+
+    const { error: loanError } = await supabase
       .from('loans')
       .update({
         remaining_balance: 0,
         status: 'completed',
-        repayments: updatedRepayments,
       })
-      .eq('id', id)
-      .then(({ error }) => {
-        if (error) console.error('Failed to update early settlement in Supabase:', error);
-      });
+      .eq('id', id);
+
+    if (loanError) {
+      await supabase.from('loan_repayments').delete().eq('id', newRepayment.id);
+      set({ loans: previousLoans });
+      toast.error(`Failed to settle loan early: ${loanError.message}`);
+      throw new Error(loanError.message);
+    }
   },
 
   getActiveLoan: (employeeId) => {

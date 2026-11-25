@@ -2,10 +2,37 @@ import React, { useState, useEffect } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
+import { useAuthStore } from '@/stores/authStore';
+import { useEmployeeStore } from '@/stores/employeeStore';
+import { useDepartmentStore } from '@/stores/departmentStore';
+import { useAttendanceStore } from '@/stores/attendanceStore';
+import { useLoanStore } from '@/stores/loanStore';
+import { usePayrollStore } from '@/stores/payrollStore';
+import { useSettingsStore } from '@/stores/settingsStore';
+import { useNotificationStore } from '@/stores/notificationStore';
+import { useAuditStore } from '@/stores/auditStore';
 
 export function MainLayout() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const location = useLocation();
+  const { isAuthenticated, currentUser } = useAuthStore();
+
+  const currentUserId = currentUser?.id;
+
+  // Fetch domain data only after authentication session is verified
+  useEffect(() => {
+    if (!isAuthenticated || !currentUserId) return;
+
+    useAuthStore.getState().fetchUsers();
+    useEmployeeStore.getState().fetchEmployees();
+    useDepartmentStore.getState().fetchDepartments();
+    useAttendanceStore.getState().fetchAttendanceAndLeaves();
+    useLoanStore.getState().fetchLoans();
+    usePayrollStore.getState().fetchPayroll();
+    useSettingsStore.getState().fetchSettings();
+    useNotificationStore.getState().fetchNotifications();
+    useAuditStore.getState().fetchLogs();
+  }, [isAuthenticated, currentUserId]);
 
   // Automatically close mobile menu on page navigation
   useEffect(() => {

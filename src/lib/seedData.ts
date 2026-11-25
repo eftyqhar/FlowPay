@@ -16,7 +16,7 @@ export const initializeSeedData = () => {
     legacyKeys.forEach((key) => {
       try {
         localStorage.removeItem(key);
-      } catch (e) {
+      } catch {
         // ignore
       }
     });

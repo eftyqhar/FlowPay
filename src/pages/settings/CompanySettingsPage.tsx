@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -44,6 +44,21 @@ export default function CompanySettingsPage() {
       fiscalYearStartMonth: settings?.fiscalYearStart || 1,
     }
   });
+
+  useEffect(() => {
+    if (!settings) return;
+    form.reset({
+      companyName: settings.name || '',
+      companyLogo: settings.logo || '',
+      address: settings.address || '',
+      phone: settings.phone || '',
+      email: settings.email || '',
+      website: settings.website || '',
+      currencySymbol: settings.currencySymbol || '৳',
+      currencyName: settings.currency || 'BDT',
+      fiscalYearStartMonth: settings.fiscalYearStart || 1,
+    });
+  }, [settings, form]);
 
   const onSubmit = (data: CompanyFormValues) => {
     updateSettings({

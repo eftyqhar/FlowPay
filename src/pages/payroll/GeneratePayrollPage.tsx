@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useDeferredValue } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { CurrencyDisplay } from '@/components/shared/CurrencyDisplay';
@@ -200,9 +200,21 @@ export default function GeneratePayrollPage() {
     }
   };
 
+  const deferredAdjustments = useDeferredValue(adjustments);
+
+  // Pre-compute attendance & OT summaries separately from adjustment keystrokes
+  const monthlySummariesByEmpId = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof getMonthlyEmployeeSummary>>();
+    activeEmployees.forEach((emp) => {
+      map.set(emp.id, getMonthlyEmployeeSummary(emp.id, monthNum, yearNum));
+    });
+    return map;
+  }, [activeEmployees, monthNum, yearNum, getMonthlyEmployeeSummary]);
+
   const calculatedSalaries = useMemo(() => {
+    const workingDays = settings?.standardWorkingDays || 22;
     return activeEmployees.map((emp) => {
-      const adj = adjustments[emp.id] || {
+      const adj = deferredAdjustments[emp.id] || {
         bonus: 0,
         overtime: 0,
         unpaidLeaveDays: 0,
@@ -225,10 +237,8 @@ export default function GeneratePayrollPage() {
         settings
       );
 
-      const workingDays = settings?.standardWorkingDays || 22;
       const dailyRate = roundCurrency(emp.basicSalary / workingDays);
-
-      const summary = getMonthlyEmployeeSummary(emp.id, monthNum, yearNum);
+      const summary = monthlySummariesByEmpId.get(emp.id);
 
       return {
         employee: emp,
@@ -239,16 +249,56 @@ export default function GeneratePayrollPage() {
         net: calc.netSalary,
         bonus: adj.bonus,
         overtime: adj.overtime,
-        detectedOtHours: summary.overtimeHours || 0,
+        detectedOtHours: summary?.overtimeHours || 0,
         unpaidLeaveDays: adj.unpaidLeaveDays,
         loanInstallment: adj.loanInstallment,
       };
     });
-  }, [activeEmployees, adjustments, settings, monthNum, yearNum, getMonthlyEmployeeSummary]);
+  }, [activeEmployees, deferredAdjustments, settings, monthlySummariesByEmpId]);
 
-  const selectedCalculations = calculatedSalaries.filter((c) =>
-    selectedEmployees.includes(c.employee.id)
-  );
+  // Step 3 uses immediate (non-deferred) adjustments so final generation never sees stale values
+  const finalizedCalculations = useMemo(() => {
+    return activeEmployees
+      .filter((emp) => selectedEmployees.includes(emp.id))
+      .map((emp) => {
+        const adj = adjustments[emp.id] || {
+          bonus: 0,
+          overtime: 0,
+          unpaidLeaveDays: 0,
+          loanInstallment: 0,
+        };
+
+        const calc = calculateFullSalary(
+          {
+            basicSalary: emp.basicSalary,
+            allowances: emp.allowances,
+            bonus: adj.bonus,
+            overtime: adj.overtime,
+            deductions: emp.deductions,
+            tax: emp.tax,
+            unpaidLeaveDays: adj.unpaidLeaveDays,
+            absentDays: 0,
+            loanInstallment: adj.loanInstallment,
+            pfEligible: emp.pfEligible ?? true,
+          },
+          settings
+        );
+
+        return {
+          employee: emp,
+          gross: calc.grossSalary,
+          deductions: calc.totalDeductions,
+          absenceDeduction: calc.leaveDeduction,
+          net: calc.netSalary,
+          bonus: adj.bonus,
+          overtime: adj.overtime,
+          unpaidLeaveDays: adj.unpaidLeaveDays,
+          loanInstallment: adj.loanInstallment,
+        };
+      });
+  }, [activeEmployees, selectedEmployees, adjustments, settings]);
+
+  const selectedCalculations = finalizedCalculations;
 
   const summaryTotals = useMemo(() => {
     return selectedCalculations.reduce(
@@ -262,7 +312,7 @@ export default function GeneratePayrollPage() {
     );
   }, [selectedCalculations]);
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     if (selectedCalculations.length === 0) {
       toast.error('No employees selected');
       return;
@@ -289,7 +339,7 @@ export default function GeneratePayrollPage() {
         pfEligible: c.employee.pfEligible ?? true,
       }));
 
-      generatePayroll(
+      await generatePayroll(
         monthNum,
         yearNum,
         selectedPayload,

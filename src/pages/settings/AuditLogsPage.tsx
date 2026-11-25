@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Download, ShieldCheck, Search, Filter } from 'lucide-react';
+import { Download, ShieldCheck, Search } from 'lucide-react';
 import { useAuditStore } from '@/stores/auditStore';
 import { formatDate } from '@/lib/utils';
 import { exportToExcel, exportToCSV } from '@/lib/export';

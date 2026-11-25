@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { CurrencyDisplay } from '@/components/shared/CurrencyDisplay';
 import { Button } from '@/components/ui/button';
@@ -18,12 +18,12 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { FileText, Download, Search, CheckCircle } from 'lucide-react';
+import { FileText, Download, Search } from 'lucide-react';
 import { usePayrollStore } from '@/stores/payrollStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useEmployeeStore } from '@/stores/employeeStore';
 import { PayrollRecord } from '@/lib/types';
-import { getMonthName, formatDate } from '@/lib/utils';
+import { getMonthName } from '@/lib/utils';
 import { exportToPDF } from '@/lib/export';
 import { PayslipPreviewDialog } from '@/components/payslip/PayslipPreviewDialog';
 import { PayslipTemplate } from '@/components/payslip/PayslipTemplate';
@@ -41,6 +41,7 @@ export default function AllPayslipsPage() {
   const [selectedRecord, setSelectedRecord] = useState<PayrollRecord | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [pdfTargetRecord, setPdfTargetRecord] = useState<PayrollRecord | null>(null);
 
   const isEmployee = currentUser?.role === 'employee';
   const myEmployee = isEmployee
@@ -87,27 +88,42 @@ export default function AllPayslipsPage() {
     setPreviewOpen(true);
   };
 
-  const handleDownloadPdf = async (record: PayrollRecord) => {
-    const elementId = `payslip-content-${record.id}`;
-    const el = document.getElementById(elementId);
-    if (!el) {
-      // Fallback: open preview and download
-      handlePreview(record);
-      return;
-    }
+  useEffect(() => {
+    if (!pdfTargetRecord) return;
 
-    try {
-      setDownloadingId(record.id);
-      toast.info(`Generating PDF for ${record.employeeName}...`);
-      const filename = `Payslip_${record.employeeName.replace(/\s+/g, '_')}_${getMonthName(record.month)}_${record.year}`;
-      await exportToPDF(elementId, filename);
-      toast.success('Payslip downloaded successfully');
-    } catch (err) {
-      console.error(err);
-      toast.error('Failed to export PDF');
-    } finally {
-      setDownloadingId(null);
-    }
+    let cancelled = false;
+    const runExport = async () => {
+      // Wait for React commit + browser layout frame
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      if (cancelled) return;
+
+      const elementId = `payslip-content-pdf-${pdfTargetRecord.id}`;
+      try {
+        toast.info(`Generating PDF for ${pdfTargetRecord.employeeName}...`);
+        const filename = `Payslip_${pdfTargetRecord.employeeName.replace(/\s+/g, '_')}_${getMonthName(pdfTargetRecord.month)}_${pdfTargetRecord.year}`;
+        await exportToPDF(elementId, filename);
+        toast.success('Payslip downloaded successfully');
+      } catch (err) {
+        console.error(err);
+        toast.error('Failed to export PDF');
+      } finally {
+        if (!cancelled) {
+          setDownloadingId(null);
+          setPdfTargetRecord(null);
+        }
+      }
+    };
+
+    runExport();
+    return () => {
+      cancelled = true;
+    };
+  }, [pdfTargetRecord]);
+
+  const handleDownloadPdf = (record: PayrollRecord) => {
+    if (downloadingId) return;
+    setDownloadingId(record.id);
+    setPdfTargetRecord(record);
   };
 
   return (
@@ -224,12 +240,25 @@ export default function AllPayslipsPage() {
         </div>
       </div>
 
-      {/* Hidden off-screen render container for direct PDF download */}
-      <div style={{ position: 'absolute', left: '-9999px', top: '-9999px' }}>
-        {filteredPayrolls.map((rec) => (
-          <PayslipTemplate key={rec.id} payrollRecord={rec} idSuffix={rec.id} />
-        ))}
-      </div>
+      {/* Dedicated off-screen render container for direct 1-click PDF download */}
+      {pdfTargetRecord && (
+        <div
+          aria-hidden="true"
+          style={{
+            position: 'fixed',
+            left: '-10000px',
+            top: 0,
+            width: '800px',
+            pointerEvents: 'none',
+            zIndex: -1,
+          }}
+        >
+          <PayslipTemplate
+            payrollRecord={pdfTargetRecord}
+            idSuffix={`pdf-${pdfTargetRecord.id}`}
+          />
+        </div>
+      )}
 
       {previewOpen && selectedRecord && (
         <PayslipPreviewDialog

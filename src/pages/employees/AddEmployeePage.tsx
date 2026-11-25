@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { formatCurrency, generateEmployeeId } from '@/lib/utils';
+import { formatCurrency } from '@/lib/utils';
 import { calculateGross, calculateTotalDeductions, calculateNet } from '@/lib/salary';
 import { Smartphone, Building, CreditCard, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
@@ -51,10 +51,8 @@ type FormData = z.infer<typeof schema>;
 
 export default function AddEmployeePage() {
   const navigate = useNavigate();
-  const { addEmployee, getNextEmployeeId } = useEmployeeStore();
+  const { addEmployee } = useEmployeeStore();
   const { departments } = useDepartmentStore();
-
-  const employeeId = getNextEmployeeId();
 
   const {
     register,
@@ -100,7 +98,6 @@ export default function AddEmployeePage() {
   const overtime = watch('overtime') || 0;
   const deductions = watch('deductions') || 0;
   const tax = watch('tax') || 0;
-  const selectedPaymentMethod = watch('paymentMethod');
 
   const totalAllowances = useMemo(() => {
     const sumIndividual = Number(houseRent) + Number(medical) + Number(transport);
@@ -120,32 +117,41 @@ export default function AddEmployeePage() {
     [currentGross, currentTotalDeductions]
   );
 
-  const onSubmit = (data: FormData) => {
-    addEmployee({
-      ...data,
-      allowances: totalAllowances,
-      houseRentAllowance: Number(data.houseRentAllowance) || 0,
-      medicalAllowance: Number(data.medicalAllowance) || 0,
-      transportAllowance: Number(data.transportAllowance) || 0,
-      photo: `https://ui-avatars.com/api/?name=${encodeURIComponent(data.fullName)}&background=random`,
-      leaveBalance: { casual: 10, sick: 14, annual: 15 },
-      pfEligible: true,
-      bankInfo: {
-        bankName: data.bankInfo?.bankName || 'Dutch-Bangla Bank',
-        accountNumber: data.bankInfo?.accountNumber || '1000000000',
-        routingNumber: data.bankInfo?.routingNumber || '090270001',
-        accountType: data.bankInfo?.accountType || 'savings',
-      },
-      mobileBankingInfo: data.mobileBankingInfo?.accountNumber
-        ? {
-            provider: data.mobileBankingInfo.provider || 'bkash',
-            accountNumber: data.mobileBankingInfo.accountNumber,
-            accountType: data.mobileBankingInfo.accountType || 'personal',
-          }
-        : undefined,
-    });
-    toast.success('Employee added successfully');
-    navigate('/employees');
+  const onSubmit = async (data: FormData) => {
+    try {
+      const hasBankInfo =
+        Boolean(data.bankInfo?.bankName?.trim()) || Boolean(data.bankInfo?.accountNumber?.trim());
+
+      const created = await addEmployee({
+        ...data,
+        allowances: totalAllowances,
+        houseRentAllowance: Number(data.houseRentAllowance) || 0,
+        medicalAllowance: Number(data.medicalAllowance) || 0,
+        transportAllowance: Number(data.transportAllowance) || 0,
+        photo: `https://ui-avatars.com/api/?name=${encodeURIComponent(data.fullName)}&background=random`,
+        leaveBalance: { casual: 10, sick: 14, annual: 15 },
+        pfEligible: true,
+        bankInfo: hasBankInfo
+          ? {
+              bankName: data.bankInfo.bankName.trim(),
+              accountNumber: data.bankInfo.accountNumber.trim(),
+              routingNumber: data.bankInfo.routingNumber?.trim() || '',
+              accountType: data.bankInfo.accountType || 'savings',
+            }
+          : undefined,
+        mobileBankingInfo: data.mobileBankingInfo?.accountNumber
+          ? {
+              provider: data.mobileBankingInfo.provider || 'bkash',
+              accountNumber: data.mobileBankingInfo.accountNumber,
+              accountType: data.mobileBankingInfo.accountType || 'personal',
+            }
+          : undefined,
+      });
+      toast.success(`Employee added successfully (${created.employeeId})`);
+      navigate('/employees');
+    } catch {
+      // Error toast is already surfaced by store
+    }
   };
 
   return (
@@ -222,7 +228,11 @@ export default function AddEmployeePage() {
           <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Assigned Employee ID</Label>
-              <Input value={employeeId} disabled className="bg-slate-50 font-mono text-slate-700 font-bold" />
+              <Input
+                value="Auto-assigned on save (EMP-XXXX)"
+                disabled
+                className="bg-slate-50 font-mono text-slate-500 text-xs"
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="department">Department *</Label>

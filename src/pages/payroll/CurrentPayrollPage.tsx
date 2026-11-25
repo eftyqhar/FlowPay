@@ -47,7 +47,7 @@ import { toast } from 'sonner';
 
 export default function CurrentPayrollPage() {
   const navigate = useNavigate();
-  const { payrollRecords, getPayrollByMonth, approvePayroll, markAsPaid } = usePayrollStore();
+  const { payrollRecords, approvePayroll, markAsPaid } = usePayrollStore();
   const { currentUser } = useAuthStore();
   const { addLog } = useAuditStore();
 
@@ -80,7 +80,13 @@ export default function CurrentPayrollPage() {
   const [transactionRef, setTransactionRef] = useState('');
 
   const periodString = getMonthYear(selectedMonth, selectedYear);
-  const payrolls = getPayrollByMonth(selectedMonth, selectedYear) || [];
+  const payrolls = useMemo(
+    () =>
+      payrollRecords.filter(
+        (p) => p.month === selectedMonth && p.year === selectedYear
+      ),
+    [payrollRecords, selectedMonth, selectedYear]
+  );
 
   const filteredPayrolls = useMemo(() => {
     if (activeTab === 'all') return payrolls;
@@ -127,7 +133,7 @@ export default function CurrentPayrollPage() {
     }
   };
 
-  const handleBulkApprove = () => {
+  const handleBulkApprove = async () => {
     const draftIds = selectedIds.filter(
       (id) => payrolls.find((p) => p.id === id)?.status === 'draft'
     );
@@ -137,16 +143,20 @@ export default function CurrentPayrollPage() {
     }
 
     const approverName = currentUser?.name || 'Admin';
-    approvePayroll(draftIds, approverName);
-    addLog({
-      userId: currentUser?.id || 'USR-001',
-      userName: approverName,
-      action: 'Batch Payroll Approval',
-      module: 'Payroll',
-      details: `Approved ${draftIds.length} payroll records for ${periodString}`,
-    });
-    toast.success(`Approved ${draftIds.length} payroll records`);
-    setSelectedIds([]);
+    try {
+      await approvePayroll(draftIds, approverName);
+      addLog({
+        userId: currentUser?.id || 'USR-001',
+        userName: approverName,
+        action: 'Batch Payroll Approval',
+        module: 'Payroll',
+        details: `Approved ${draftIds.length} payroll records for ${periodString}`,
+      });
+      toast.success(`Approved ${draftIds.length} payroll records`);
+      setSelectedIds([]);
+    } catch {
+      // Error surfaced by store
+    }
   };
 
   const handleOpenBulkPayModal = () => {
@@ -168,20 +178,17 @@ export default function CurrentPayrollPage() {
     setPayModalOpen(true);
   };
 
-  const handleConfirmDisbursement = () => {
+  const handleConfirmDisbursement = async () => {
     if (pendingPayIds.length === 0) return;
     const paidByName = currentUser?.name || 'Accountant';
-    markAsPaid(pendingPayIds, paidByName, paymentMethod, transactionRef);
-    addLog({
-      userId: currentUser?.id || 'USR-003',
-      userName: paidByName,
-      action: 'Disburse Salary',
-      module: 'Payroll',
-      details: `Disbursed ${pendingPayIds.length} salaries via ${paymentMethod} (Ref: ${transactionRef})`,
-    });
-    toast.success(`Disbursed salary for ${pendingPayIds.length} employee(s)`);
-    setPayModalOpen(false);
-    setSelectedIds([]);
+    try {
+      await markAsPaid(pendingPayIds, paidByName, paymentMethod, transactionRef);
+      toast.success(`Disbursed salary for ${pendingPayIds.length} employee(s)`);
+      setPayModalOpen(false);
+      setSelectedIds([]);
+    } catch {
+      // Error surfaced by store
+    }
   };
 
   return (

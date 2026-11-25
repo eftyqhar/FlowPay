@@ -165,30 +165,38 @@ export default function EditEmployeePage() {
     [currentGross, currentTotalDeductions]
   );
 
-  const onSubmit = (data: FormData) => {
+  const onSubmit = async (data: FormData) => {
     if (!id) return;
-    updateEmployee(id, {
-      ...data,
-      allowances: totalAllowances,
-      houseRentAllowance: Number(data.houseRentAllowance) || 0,
-      medicalAllowance: Number(data.medicalAllowance) || 0,
-      transportAllowance: Number(data.transportAllowance) || 0,
-      bankInfo: {
-        bankName: data.bankInfo?.bankName || 'N/A',
-        accountNumber: data.bankInfo?.accountNumber || 'N/A',
-        routingNumber: data.bankInfo?.routingNumber || 'N/A',
-        accountType: data.bankInfo?.accountType || 'savings',
-      },
-      mobileBankingInfo: data.mobileBankingInfo?.accountNumber
-        ? {
-            provider: data.mobileBankingInfo.provider || 'bkash',
-            accountNumber: data.mobileBankingInfo.accountNumber,
-            accountType: data.mobileBankingInfo.accountType || 'personal',
-          }
-        : undefined,
-    });
-    toast.success('Employee updated successfully');
-    navigate(`/employees/${id}`);
+    const hasBankInfo =
+      Boolean(data.bankInfo?.bankName?.trim()) || Boolean(data.bankInfo?.accountNumber?.trim());
+    try {
+      await updateEmployee(id, {
+        ...data,
+        allowances: totalAllowances,
+        houseRentAllowance: Number(data.houseRentAllowance) || 0,
+        medicalAllowance: Number(data.medicalAllowance) || 0,
+        transportAllowance: Number(data.transportAllowance) || 0,
+        bankInfo: hasBankInfo
+          ? {
+              bankName: data.bankInfo.bankName.trim(),
+              accountNumber: data.bankInfo.accountNumber.trim(),
+              routingNumber: data.bankInfo.routingNumber?.trim() || '',
+              accountType: data.bankInfo.accountType || 'savings',
+            }
+          : undefined,
+        mobileBankingInfo: data.mobileBankingInfo?.accountNumber
+          ? {
+              provider: data.mobileBankingInfo.provider || 'bkash',
+              accountNumber: data.mobileBankingInfo.accountNumber,
+              accountType: data.mobileBankingInfo.accountType || 'personal',
+            }
+          : undefined,
+      });
+      toast.success('Employee updated successfully');
+      navigate(`/employees/${id}`);
+    } catch {
+      // Error surfaced by store
+    }
   };
 
   if (!employee) {

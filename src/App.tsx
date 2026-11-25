@@ -7,14 +7,6 @@ import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { LoginPage } from '@/pages/auth/LoginPage';
 import { initializeSeedData } from '@/lib/seedData';
 import { useAuthStore } from '@/stores/authStore';
-import { useEmployeeStore } from '@/stores/employeeStore';
-import { useDepartmentStore } from '@/stores/departmentStore';
-import { useAttendanceStore } from '@/stores/attendanceStore';
-import { useLoanStore } from '@/stores/loanStore';
-import { usePayrollStore } from '@/stores/payrollStore';
-import { useSettingsStore } from '@/stores/settingsStore';
-import { useNotificationStore } from '@/stores/notificationStore';
-import { useAuditStore } from '@/stores/auditStore';
 
 // Dashboard
 import DashboardPage from '@/pages/dashboard/DashboardPage';
@@ -61,18 +53,8 @@ export function App() {
     // 1. Clean legacy dummy localStorage cache
     initializeSeedData();
 
-    // 2. Initialize Supabase Auth session
+    // 2. Initialize Supabase Auth session (domain data is fetched post-authentication in MainLayout)
     useAuthStore.getState().initAuth();
-
-    // 3. Fetch live data from Supabase PostgreSQL
-    useEmployeeStore.getState().fetchEmployees();
-    useDepartmentStore.getState().fetchDepartments();
-    useAttendanceStore.getState().fetchAttendanceAndLeaves();
-    useLoanStore.getState().fetchLoans();
-    usePayrollStore.getState().fetchPayroll();
-    useSettingsStore.getState().fetchSettings();
-    useNotificationStore.getState().fetchNotifications();
-    useAuditStore.getState().fetchLogs();
   }, []);
 
   return (

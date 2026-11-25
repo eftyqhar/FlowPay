@@ -11,9 +11,6 @@ import {
   LogOut,
   CalendarCheck,
   PiggyBank,
-  ShieldCheck,
-  Building2,
-  FileCheck2,
   X,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';

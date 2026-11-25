@@ -4,6 +4,7 @@ import {
   AttendanceRecord,
   LeaveRequest,
   LoanRecord,
+  LoanRepayment,
   PayrollRecord,
   CompanySettings,
   NotificationItem,
@@ -64,7 +65,7 @@ export const rowToEmployee = (row: any): Employee => {
     overtime: Number(row.overtime) || 0,
     deductions: Number(row.deductions) || 0,
     tax: Number(row.tax) || 0,
-    bankInfo: row.bank_info || { bankName: '', accountNumber: '', routingNumber: '', accountType: 'savings' },
+    bankInfo: row.bank_info || undefined,
     paymentMethod: row.payment_method || undefined,
     mobileBankingInfo: row.mobile_banking_info || undefined,
     status: row.status || 'active',
@@ -87,14 +88,14 @@ export const employeeToRow = (emp: Partial<Employee>) => {
 
   return {
     id: emp.id,
-    employee_id: emp.employeeId,
+    employee_id: emp.employeeId || null,
     full_name: emp.fullName,
     email: emp.email,
     phone: emp.phone ?? '',
     photo: emp.photo ?? null,
     department: emp.department,
     designation: emp.designation,
-    joining_date: emp.joiningDate,
+    joining_date: emp.joiningDate || null,
     basic_salary: emp.basicSalary ?? 0,
     allowances: totalAllowances,
     house_rent_allowance: houseRent,
@@ -104,7 +105,10 @@ export const employeeToRow = (emp: Partial<Employee>) => {
     overtime: emp.overtime ?? 0,
     deductions: emp.deductions ?? 0,
     tax: emp.tax ?? 0,
-    bank_info: emp.bankInfo ?? null,
+    bank_info:
+      emp.bankInfo && (emp.bankInfo.bankName?.trim() || emp.bankInfo.accountNumber?.trim())
+        ? emp.bankInfo
+        : null,
     payment_method: emp.paymentMethod ?? null,
     mobile_banking_info: emp.mobileBankingInfo ?? null,
     status: emp.status ?? 'active',
@@ -136,7 +140,7 @@ export const attendanceToRow = (rec: Partial<AttendanceRecord>) => ({
   id: rec.id,
   employee_id: rec.employeeId,
   employee_name: rec.employeeName,
-  date: rec.date,
+  date: rec.date || null,
   check_in: rec.checkIn ?? null,
   check_out: rec.checkOut ?? null,
   status: rec.status,
@@ -171,8 +175,8 @@ export const leaveToRow = (req: Partial<LeaveRequest>) => ({
   employee_name: req.employeeName,
   department: req.department ?? null,
   leave_type: req.leaveType,
-  start_date: req.startDate,
-  end_date: req.endDate,
+  start_date: req.startDate || null,
+  end_date: req.endDate || null,
   days_count: req.daysCount,
   reason: req.reason,
   status: req.status ?? 'pending',
@@ -182,24 +186,58 @@ export const leaveToRow = (req: Partial<LeaveRequest>) => ({
   rejection_reason: req.rejectionReason ?? null,
 });
 
-// 5. Loan Record
-export const rowToLoan = (row: any): LoanRecord => ({
+// 5. Loan Record & Normalized Loan Repayments
+export const rowToLoanRepayment = (row: any): LoanRepayment => ({
   id: row.id,
-  employeeId: row.employee_id,
-  employeeName: row.employee_name,
-  department: row.department || '',
-  type: row.type || 'loan',
-  principalAmount: Number(row.principal_amount) || 0,
-  monthlyInstallment: Number(row.monthly_installment) || 0,
-  remainingBalance: Number(row.remaining_balance) || 0,
-  termMonths: Number(row.term_months) || 1,
-  reason: row.reason || '',
-  status: row.status || 'pending',
-  appliedAt: row.applied_at || new Date().toISOString(),
-  approvedBy: row.approved_by || undefined,
-  approvedAt: row.approved_at || undefined,
-  repayments: row.repayments || [],
+  date: row.date || new Date().toISOString(),
+  amount: Number(row.amount) || 0,
+  payrollRecordId: row.payroll_record_id || row.payrollRecordId || undefined,
+  month: row.month != null ? Number(row.month) : undefined,
+  year: row.year != null ? Number(row.year) : undefined,
 });
+
+export const loanRepaymentToRow = (
+  rep: LoanRepayment,
+  loanId: string
+) => ({
+  id: rep.id,
+  loan_id: loanId,
+  payroll_record_id: rep.payrollRecordId ?? null,
+  amount: rep.amount,
+  month: rep.month ?? null,
+  year: rep.year ?? null,
+  date: rep.date || new Date().toISOString(),
+});
+
+export const rowToLoan = (row: any): LoanRecord => {
+  const rawRepayments = Array.isArray(row.loan_repayments)
+    ? row.loan_repayments
+    : Array.isArray(row.repayments)
+      ? row.repayments
+      : [];
+
+  const repayments: LoanRepayment[] = rawRepayments
+    .map(rowToLoanRepayment)
+    .sort((a: LoanRepayment, b: LoanRepayment) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+  return {
+    id: row.id,
+    employeeId: row.employee_id,
+    employeeName: row.employee_name,
+    department: row.department || '',
+    type: row.type || 'loan',
+    principalAmount: Number(row.principal_amount) || 0,
+    monthlyInstallment: Number(row.monthly_installment) || 0,
+    remainingBalance: Number(row.remaining_balance) || 0,
+    termMonths: Number(row.term_months) || 1,
+    reason: row.reason || '',
+    status: row.status || 'pending',
+    appliedAt: row.applied_at || new Date().toISOString(),
+    approvedBy: row.approved_by || undefined,
+    approvedAt: row.approved_at || undefined,
+    repayments,
+  };
+};
 
 export const loanToRow = (loan: Partial<LoanRecord>) => ({
   id: loan.id,
@@ -216,7 +254,6 @@ export const loanToRow = (loan: Partial<LoanRecord>) => ({
   applied_at: loan.appliedAt ?? new Date().toISOString(),
   approved_by: loan.approvedBy ?? null,
   approved_at: loan.approvedAt ?? null,
-  repayments: loan.repayments ?? [],
 });
 
 // 6. Payroll Record
@@ -284,7 +321,7 @@ export const payrollToRow = (p: Partial<PayrollRecord>) => ({
   net_salary: p.netSalary ?? 0,
   status: p.status ?? 'draft',
   payment_method: p.paymentMethod ?? null,
-  payment_date: p.paymentDate ?? null,
+  payment_date: p.paymentDate || null,
   transaction_ref: p.transactionRef ?? null,
   created_by: p.createdBy ?? 'Admin',
   created_at: p.createdAt ?? new Date().toISOString(),

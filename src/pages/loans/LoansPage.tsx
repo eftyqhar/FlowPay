@@ -32,7 +32,6 @@ import { Badge } from '@/components/ui/badge';
 import {
   Wallet,
   PiggyBank,
-  CheckCircle2,
   Clock,
   Plus,
   Eye,
@@ -40,9 +39,7 @@ import {
   X,
   CreditCard,
   AlertCircle,
-  Calendar,
   DollarSign,
-  HelpCircle,
   FileText,
 } from 'lucide-react';
 import { useLoanStore } from '@/stores/loanStore';
@@ -69,9 +66,8 @@ export default function LoansPage() {
   const myEmployee = useMemo(() => {
     return employees.find(
       (e) =>
-        e.employeeId === currentUser?.employeeId ||
-        e.email.toLowerCase() === currentUser?.email.toLowerCase() ||
-        e.fullName.toLowerCase() === currentUser?.name?.toLowerCase()
+        (currentUser?.employeeId && e.employeeId === currentUser.employeeId) ||
+        (currentUser?.email && e.email.toLowerCase() === currentUser.email.toLowerCase())
     );
   }, [employees, currentUser]);
 
@@ -182,7 +178,7 @@ export default function LoansPage() {
     };
   }, [loans, myEmployee]);
 
-  const handleApply = (e: React.FormEvent) => {
+  const handleApply = async (e: React.FormEvent) => {
     e.preventDefault();
     const emp = targetEmp;
     if (!emp) {
@@ -203,103 +199,57 @@ export default function LoansPage() {
       return;
     }
 
-    const newLoan = applyLoan({
-      employeeId: emp.id,
-      employeeName: emp.fullName,
-      department: emp.department,
-      type: loanType,
-      principalAmount: amount,
-      monthlyInstallment,
-      termMonths,
-      reason: reason.trim(),
-    });
+    try {
+      await applyLoan({
+        employeeId: emp.id,
+        employeeName: emp.fullName,
+        department: emp.department,
+        type: loanType,
+        principalAmount: amount,
+        monthlyInstallment,
+        termMonths,
+        reason: reason.trim(),
+      });
 
-    // Notify Admins, Owners, Accountants & HR
-    addNotification({
-      title: loanType === 'advance' ? 'New Salary Advance Application' : 'New Personal Loan Request',
-      message: `${emp.fullName} (${emp.department}) applied for ${
-        loanType === 'advance' ? 'Salary Advance' : 'Personal Loan'
-      } of ৳${amount.toLocaleString()} for ${termMonths} month(s).`,
-      type: 'info',
-      link: '/loans',
-      targetRoles: ['admin', 'owner', 'accountant', 'hr'],
-    });
-
-    // Audit Log
-    addLog({
-      userId: currentUser?.id || 'USR-005',
-      userName: currentUser?.name || emp.fullName,
-      action: 'Apply for Loan / Advance',
-      module: 'Loans',
-      details: `${emp.fullName} applied for ${loanType.toUpperCase()} of ৳${amount} (${termMonths} months @ ৳${monthlyInstallment}/mo). Reason: ${reason.trim()}`,
-    });
-
-    toast.success(
-      `${loanType === 'advance' ? 'Salary Advance' : 'Loan'} application submitted successfully!`
-    );
-    setReason('');
-    setApplyModalOpen(false);
-  };
-
-  const handleApprove = (loan: LoanRecord) => {
-    const approverName = currentUser?.name || 'Finance Admin';
-    approveLoan(loan.id, approverName);
-
-    // Notify the specific employee
-    addNotification({
-      title: `${loan.type === 'advance' ? 'Salary Advance' : 'Loan'} Approved!`,
-      message: `Your ${loan.type === 'advance' ? 'Salary Advance' : 'Personal Loan'} of ৳${loan.principalAmount.toLocaleString()} has been approved. Monthly payroll deduction: ৳${loan.monthlyInstallment.toLocaleString()}.`,
-      type: 'success',
-      link: '/loans',
-      targetEmployeeId: loan.employeeId,
-    });
-
-    addLog({
-      userId: currentUser?.id || 'USR-003',
-      userName: approverName,
-      action: 'Approve Loan / Advance',
-      module: 'Loans',
-      details: `Approved ${loan.type} of ৳${loan.principalAmount} for ${loan.employeeName} (${loan.termMonths} mo @ ৳${loan.monthlyInstallment}/mo)`,
-    });
-
-    toast.success(`Loan approved for ${loan.employeeName}`);
-  };
-
-  const handleReject = (loan: LoanRecord) => {
-    rejectLoan(loan.id);
-
-    // Notify the specific employee
-    addNotification({
-      title: `${loan.type === 'advance' ? 'Salary Advance' : 'Loan'} Not Approved`,
-      message: `Your request for ${loan.type === 'advance' ? 'Salary Advance' : 'Personal Loan'} of ৳${loan.principalAmount.toLocaleString()} was not approved at this time.`,
-      type: 'warning',
-      link: '/loans',
-      targetEmployeeId: loan.employeeId,
-    });
-
-    addLog({
-      userId: currentUser?.id || 'USR-003',
-      userName: currentUser?.name || 'Finance Admin',
-      action: 'Reject Loan Application',
-      module: 'Loans',
-      details: `Rejected ${loan.type} application of ৳${loan.principalAmount} for ${loan.employeeName}`,
-    });
-
-    toast.info(`Application rejected for ${loan.employeeName}`);
-  };
-
-  const handleSettleEarly = (loan: LoanRecord) => {
-    if (
-      window.confirm(
-        `Are you sure you want to mark this loan of ৳${loan.remainingBalance.toLocaleString()} for ${loan.employeeName} as fully settled?`
-      )
-    ) {
-      settleEarly(loan.id);
-
-      // Notify employee
+      // Notify Admins, Owners, Accountants & HR
       addNotification({
-        title: 'Loan Settled in Full',
-        message: `Your ${loan.type === 'advance' ? 'Salary Advance' : 'Loan'} balance of ৳${loan.remainingBalance.toLocaleString()} has been marked as fully settled and closed.`,
+        title: loanType === 'advance' ? 'New Salary Advance Application' : 'New Personal Loan Request',
+        message: `${emp.fullName} (${emp.department}) applied for ${
+          loanType === 'advance' ? 'Salary Advance' : 'Personal Loan'
+        } of ৳${amount.toLocaleString()} for ${termMonths} month(s).`,
+        type: 'info',
+        link: '/loans',
+        targetRoles: ['admin', 'owner', 'accountant', 'hr'],
+      });
+
+      // Audit Log
+      addLog({
+        userId: currentUser?.id || 'USR-005',
+        userName: currentUser?.name || emp.fullName,
+        action: 'Apply for Loan / Advance',
+        module: 'Loans',
+        details: `${emp.fullName} applied for ${loanType.toUpperCase()} of ৳${amount} (${termMonths} months @ ৳${monthlyInstallment}/mo). Reason: ${reason.trim()}`,
+      });
+
+      toast.success(
+        `${loanType === 'advance' ? 'Salary Advance' : 'Loan'} application submitted successfully!`
+      );
+      setReason('');
+      setApplyModalOpen(false);
+    } catch {
+      // Error surfaced by store
+    }
+  };
+
+  const handleApprove = async (loan: LoanRecord) => {
+    const approverName = currentUser?.name || 'Finance Admin';
+    try {
+      await approveLoan(loan.id, approverName);
+
+      // Notify the specific employee
+      addNotification({
+        title: `${loan.type === 'advance' ? 'Salary Advance' : 'Loan'} Approved!`,
+        message: `Your ${loan.type === 'advance' ? 'Salary Advance' : 'Personal Loan'} of ৳${loan.principalAmount.toLocaleString()} has been approved. Monthly payroll deduction: ৳${loan.monthlyInstallment.toLocaleString()}.`,
         type: 'success',
         link: '/loans',
         targetEmployeeId: loan.employeeId,
@@ -307,13 +257,75 @@ export default function LoansPage() {
 
       addLog({
         userId: currentUser?.id || 'USR-003',
-        userName: currentUser?.name || 'Finance Admin',
-        action: 'Early Loan Settlement',
+        userName: approverName,
+        action: 'Approve Loan / Advance',
         module: 'Loans',
-        details: `Settled remaining balance of ৳${loan.remainingBalance} early for ${loan.employeeName}`,
+        details: `Approved ${loan.type} of ৳${loan.principalAmount} for ${loan.employeeName} (${loan.termMonths} mo @ ৳${loan.monthlyInstallment}/mo)`,
       });
 
-      toast.success('Loan marked as fully settled and closed');
+      toast.success(`Loan approved for ${loan.employeeName}`);
+    } catch {
+      // Error surfaced by store
+    }
+  };
+
+  const handleReject = async (loan: LoanRecord) => {
+    try {
+      await rejectLoan(loan.id);
+
+      // Notify the specific employee
+      addNotification({
+        title: `${loan.type === 'advance' ? 'Salary Advance' : 'Loan'} Not Approved`,
+        message: `Your request for ${loan.type === 'advance' ? 'Salary Advance' : 'Personal Loan'} of ৳${loan.principalAmount.toLocaleString()} was not approved at this time.`,
+        type: 'warning',
+        link: '/loans',
+        targetEmployeeId: loan.employeeId,
+      });
+
+      addLog({
+        userId: currentUser?.id || 'USR-003',
+        userName: currentUser?.name || 'Finance Admin',
+        action: 'Reject Loan Application',
+        module: 'Loans',
+        details: `Rejected ${loan.type} application of ৳${loan.principalAmount} for ${loan.employeeName}`,
+      });
+
+      toast.info(`Application rejected for ${loan.employeeName}`);
+    } catch {
+      // Error surfaced by store
+    }
+  };
+
+  const handleSettleEarly = async (loan: LoanRecord) => {
+    if (
+      window.confirm(
+        `Are you sure you want to mark this loan of ৳${loan.remainingBalance.toLocaleString()} for ${loan.employeeName} as fully settled?`
+      )
+    ) {
+      try {
+        await settleEarly(loan.id);
+
+        // Notify employee
+        addNotification({
+          title: 'Loan Settled in Full',
+          message: `Your ${loan.type === 'advance' ? 'Salary Advance' : 'Loan'} balance of ৳${loan.remainingBalance.toLocaleString()} has been marked as fully settled and closed.`,
+          type: 'success',
+          link: '/loans',
+          targetEmployeeId: loan.employeeId,
+        });
+
+        addLog({
+          userId: currentUser?.id || 'USR-003',
+          userName: currentUser?.name || 'Finance Admin',
+          action: 'Early Loan Settlement',
+          module: 'Loans',
+          details: `Settled remaining balance of ৳${loan.remainingBalance} early for ${loan.employeeName}`,
+        });
+
+        toast.success('Loan marked as fully settled and closed');
+      } catch {
+        // Error surfaced by store
+      }
     }
   };
 

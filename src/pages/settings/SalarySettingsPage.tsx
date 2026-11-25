@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -25,9 +25,6 @@ import {
   Clock,
   Calendar,
   ShieldCheck,
-  CheckCircle2,
-  Info,
-  DollarSign,
   Gift,
   HandCoins,
   Banknote,
@@ -134,6 +131,51 @@ export default function SalarySettingsPage() {
       },
     },
   });
+
+  useEffect(() => {
+    if (!settings) return;
+    form.reset({
+      payrollFrequency: (settings.payrollFrequency as any) || 'monthly',
+      salaryPaymentDate: settings.salaryPaymentDate || 1,
+      dailyWorkingHours: settings.dailyWorkingHours || 8,
+      weeklyHoliday: settings.weeklyHoliday || 'friday',
+      standardWorkingDays: settings.standardWorkingDays || 22,
+
+      autoDeductAbsenceDays: settings.autoDeductAbsenceDays ?? true,
+      halfDayDeduction: settings.halfDayDeduction ?? true,
+      unpaidLeaveDeduction: settings.unpaidLeaveDeduction ?? true,
+      paidLeaveDeduction: 0,
+      lateDeductionEnabled: settings.lateDeductionRules?.enabled ?? true,
+      lateGraceMinutes: settings.lateDeductionRules?.graceMinutes ?? 15,
+      lateDaysThreshold: settings.lateDeductionRules?.lateDaysThreshold ?? 3,
+      lateDeductionDays: settings.lateDeductionRules?.deductionDays ?? 1,
+
+      overtimeMultiplier: settings.overtimeMultiplier || 1.5,
+      overtimeApprovalRequired: settings.overtimeApprovalRequired ?? true,
+
+      festivalBonusEnabled: settings.festivalBonusConfig?.enabled ?? true,
+      festivalBonusPercent: settings.festivalBonusConfig?.value ?? 50,
+      festivalBonusFrequency: settings.festivalBonusConfig?.frequencyPerYear ?? 2,
+      defaultAllowancePercent: settings.defaultAllowancePercent || 15,
+
+      salaryAdvanceEnabled: settings.salaryAdvanceEnabled ?? true,
+      loanDeductionEnabled: settings.loanDeductionEnabled ?? true,
+
+      defaultTaxPercent: settings.defaultTaxPercent ?? 0,
+      salaryRoundingDecimals: settings.salaryRoundingDecimals ?? 2,
+      minimumWage: settings.minimumWage || 12500,
+      taxFreeThreshold: settings.taxFreeThreshold || 350000,
+      pfEmployeePercent: settings.pfEmployeePercent ?? 0,
+      pfEmployerPercent: settings.pfEmployerPercent ?? 0,
+
+      paymentMethods: {
+        bankTransfer: settings.paymentMethods?.includes('bank_transfer') ?? true,
+        cash: settings.paymentMethods?.includes('cash') ?? true,
+        check: settings.paymentMethods?.includes('check') ?? true,
+        mobileBanking: settings.paymentMethods?.includes('mobile_banking') ?? true,
+      },
+    });
+  }, [settings, form]);
 
   const onSubmit = (data: SalarySettingsFormValues) => {
     const paymentMethods: PaymentMethod[] = [];

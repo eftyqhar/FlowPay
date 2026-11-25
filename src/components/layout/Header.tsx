@@ -7,18 +7,15 @@ import {
   Settings,
   LogOut,
   ChevronRight,
-  CheckCircle,
   AlertTriangle,
   Info,
-  X,
   Menu,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
-import { useNotificationStore } from '@/stores/notificationStore';
+import { useNotificationStore, isNotificationForUser } from '@/stores/notificationStore';
 import { useEmployeeStore } from '@/stores/employeeStore';
 import { getInitials, formatDate } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 
 interface HeaderProps {
   onToggleMobileMenu?: () => void;
@@ -28,7 +25,7 @@ export function Header({ onToggleMobileMenu }: HeaderProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { currentUser: user, logout } = useAuthStore();
-  const { notifications, markAsRead, markAllAsRead, getUserNotifications, getUnreadCount } = useNotificationStore();
+  const { notifications, markAsRead, markAllAsRead } = useNotificationStore();
   const { employees } = useEmployeeStore();
 
   const [showDropdown, setShowDropdown] = useState(false);
@@ -39,19 +36,19 @@ export function Header({ onToggleMobileMenu }: HeaderProps) {
   const myEmployee = React.useMemo(() => {
     return employees.find(
       (e) =>
-        e.employeeId === user?.employeeId ||
-        e.email.toLowerCase() === user?.email.toLowerCase() ||
-        e.fullName.toLowerCase() === user?.name.toLowerCase()
+        (user?.employeeId && e.employeeId === user.employeeId) ||
+        (user?.email && e.email.toLowerCase() === user.email.toLowerCase())
     );
   }, [employees, user]);
 
   const userNotifications = React.useMemo(() => {
-    return getUserNotifications(user, myEmployee?.id);
-  }, [getUserNotifications, user, myEmployee, notifications]);
+    if (!user) return [];
+    return notifications.filter((n) => isNotificationForUser(n, user, myEmployee?.id));
+  }, [notifications, user, myEmployee?.id]);
 
   const unreadCount = React.useMemo(() => {
-    return getUnreadCount(user, myEmployee?.id);
-  }, [getUnreadCount, user, myEmployee, notifications]);
+    return userNotifications.filter((n) => !n.isRead).length;
+  }, [userNotifications]);
 
   const searchResults = React.useMemo(() => {
     if (!searchQuery.trim()) return [];

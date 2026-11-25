@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { useAuthStore } from '@/stores/authStore';
 import { useEmployeeStore } from '@/stores/employeeStore';
 import { useAuditStore } from '@/stores/auditStore';
-import { formatDate, generateId } from '@/lib/utils';
+import { formatDate } from '@/lib/utils';
 import { UserPlus, Trash2, Power, ShieldCheck } from 'lucide-react';
 import {
   Dialog,
@@ -40,6 +40,7 @@ export default function UsersRolesPage() {
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<UserRole>('employee');
   const [linkedEmployeeId, setLinkedEmployeeId] = useState('');
+  const [isCreatingUser, setIsCreatingUser] = useState(false);
 
   const isSuperAdmin = currentUser?.role === 'owner';
 
@@ -102,10 +103,15 @@ export default function UsersRolesPage() {
     }
   };
 
-  const handleAddUser = (e: React.FormEvent) => {
+  const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !email.trim() || !password.trim()) {
       toast.error('All fields are required');
+      return;
+    }
+
+    if (password.trim().length < 6) {
+      toast.error('Password must be at least 6 characters');
       return;
     }
 
@@ -116,7 +122,7 @@ export default function UsersRolesPage() {
     }
 
     const newUser: User = {
-      id: `USR-${Date.now().toString(36).toUpperCase()}`,
+      id: '',
       name: name.trim(),
       email: email.trim().toLowerCase(),
       role,
@@ -126,21 +132,28 @@ export default function UsersRolesPage() {
       createdAt: new Date().toISOString(),
     };
 
-    addUser(newUser, password.trim());
-    addLog({
-      userId: currentUser?.id || 'USR-001',
-      userName: currentUser?.name || 'Admin',
-      action: 'Create System User',
-      module: 'Security',
-      details: `Created new user ${newUser.name} with role ${role.toUpperCase()}`,
-    });
+    setIsCreatingUser(true);
+    try {
+      await addUser(newUser, password.trim());
+      addLog({
+        userId: currentUser?.id || 'USR-001',
+        userName: currentUser?.name || 'Admin',
+        action: 'Create System User',
+        module: 'Security',
+        details: `Created new user ${newUser.name} with role ${role.toUpperCase()}`,
+      });
 
-    toast.success(`User ${newUser.name} created successfully`);
-    setName('');
-    setEmail('');
-    setPassword('');
-    setLinkedEmployeeId('');
-    setIsAddOpen(false);
+      toast.success(`User ${newUser.name} created successfully`);
+      setName('');
+      setEmail('');
+      setPassword('');
+      setLinkedEmployeeId('');
+      setIsAddOpen(false);
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to create user account');
+    } finally {
+      setIsCreatingUser(false);
+    }
   };
 
   const columns = [
@@ -368,11 +381,20 @@ export default function UsersRolesPage() {
               )}
 
               <DialogFooter className="pt-2">
-                <Button type="button" variant="outline" onClick={() => setIsAddOpen(false)}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsAddOpen(false)}
+                  disabled={isCreatingUser}
+                >
                   Cancel
                 </Button>
-                <Button type="submit" className="bg-indigo-600 hover:bg-indigo-700">
-                  Create User Account
+                <Button
+                  type="submit"
+                  className="bg-indigo-600 hover:bg-indigo-700"
+                  disabled={isCreatingUser}
+                >
+                  {isCreatingUser ? 'Creating Account...' : 'Create User Account'}
                 </Button>
               </DialogFooter>
             </form>

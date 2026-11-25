@@ -1,7 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { StatCard } from '@/components/shared/StatCard';
-import { StatusBadge } from '@/components/shared/StatusBadge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -37,7 +36,6 @@ import {
   CheckCircle2,
   XCircle,
   AlertTriangle,
-  UserCheck,
   Plus,
   Edit2,
   ThumbsUp,
@@ -113,9 +111,8 @@ export default function AttendancePage() {
   const myEmployee = useMemo(() => {
     return employees.find(
       (e) =>
-        e.employeeId === currentUser?.employeeId ||
-        e.email.toLowerCase() === currentUser?.email.toLowerCase() ||
-        e.fullName.toLowerCase() === currentUser?.name?.toLowerCase()
+        (currentUser?.employeeId && e.employeeId === currentUser.employeeId) ||
+        (currentUser?.email && e.email.toLowerCase() === currentUser.email.toLowerCase())
     );
   }, [employees, currentUser]);
 
@@ -283,32 +280,40 @@ export default function AttendancePage() {
     return { present, late, earlyCheckout, onLeave, absent };
   }, [dateRecords]);
 
-  const handleCheckIn = () => {
+  const handleCheckIn = async () => {
     if (!myEmployee) {
       toast.error('No employee profile linked to this user account');
       return;
     }
-    checkIn(myEmployee.id, myEmployee.fullName);
-    const now = new Date();
-    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-    const isLate = isLateCheckIn(timeStr);
-    toast.success(
-      `Check-in recorded at ${timeStr}${isLate ? ' (Late Check-in)' : ''}`
-    );
+    try {
+      await checkIn(myEmployee.id, myEmployee.fullName);
+      const now = new Date();
+      const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      const isLate = isLateCheckIn(timeStr);
+      toast.success(
+        `Check-in recorded at ${timeStr}${isLate ? ' (Late Check-in)' : ''}`
+      );
+    } catch {
+      // Error surfaced by store
+    }
   };
 
-  const handleCheckOut = () => {
+  const handleCheckOut = async () => {
     if (!myEmployee) return;
-    checkOut(myEmployee.id);
-    const now = new Date();
-    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-    const isEarly = isEarlyCheckOut(timeStr);
-    toast.success(
-      `Check-out recorded at ${timeStr}${isEarly ? ' (Early Check-out)' : ''}`
-    );
+    try {
+      await checkOut(myEmployee.id);
+      const now = new Date();
+      const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      const isEarly = isEarlyCheckOut(timeStr);
+      toast.success(
+        `Check-out recorded at ${timeStr}${isEarly ? ' (Early Check-out)' : ''}`
+      );
+    } catch {
+      // Error surfaced by store
+    }
   };
 
-  const handleApplyLeave = (e: React.FormEvent) => {
+  const handleApplyLeave = async (e: React.FormEvent) => {
     e.preventDefault();
     const selectedEmpId = isEmployee ? myEmployee?.id : (leaveEmployeeId || employees[0]?.id);
     const emp = employees.find((e) => e.id === selectedEmpId) || myEmployee;
@@ -321,37 +326,41 @@ export default function AttendancePage() {
       return;
     }
 
-    applyLeave({
-      employeeId: emp.id,
-      employeeName: emp.fullName,
-      department: emp.department,
-      leaveType,
-      startDate,
-      endDate,
-      daysCount: Math.max(1, daysCount),
-      reason: reason.trim(),
-    });
+    try {
+      await applyLeave({
+        employeeId: emp.id,
+        employeeName: emp.fullName,
+        department: emp.department,
+        leaveType,
+        startDate,
+        endDate,
+        daysCount: Math.max(1, daysCount),
+        reason: reason.trim(),
+      });
 
-    // Notify Admins, Owner & HR
-    addNotification({
-      title: 'New Leave Request Received',
-      message: `${emp.fullName} (${emp.department}) requested ${Math.max(1, daysCount)} day(s) of ${leaveType.toUpperCase()} leave (${formatDate(startDate)} to ${formatDate(endDate)}).`,
-      type: 'info',
-      link: '/attendance',
-      targetRoles: ['admin', 'owner', 'hr'],
-    });
+      // Notify Admins, Owner & HR
+      addNotification({
+        title: 'New Leave Request Received',
+        message: `${emp.fullName} (${emp.department}) requested ${Math.max(1, daysCount)} day(s) of ${leaveType.toUpperCase()} leave (${formatDate(startDate)} to ${formatDate(endDate)}).`,
+        type: 'info',
+        link: '/attendance',
+        targetRoles: ['admin', 'owner', 'hr'],
+      });
 
-    addLog({
-      userId: currentUser?.id || 'USR-005',
-      userName: currentUser?.name || 'Employee',
-      action: 'Apply for Leave',
-      module: 'Attendance',
-      details: `${emp.fullName} applied for ${daysCount} day(s) ${leaveType.toUpperCase()} leave (${startDate} to ${endDate})`,
-    });
+      addLog({
+        userId: currentUser?.id || 'USR-005',
+        userName: currentUser?.name || 'Employee',
+        action: 'Apply for Leave',
+        module: 'Attendance',
+        details: `${emp.fullName} applied for ${daysCount} day(s) ${leaveType.toUpperCase()} leave (${startDate} to ${endDate})`,
+      });
 
-    toast.success('Leave application submitted for approval');
-    setReason('');
-    setLeaveModalOpen(false);
+      toast.success('Leave application submitted for approval');
+      setReason('');
+      setLeaveModalOpen(false);
+    } catch {
+      // Error surfaced by store
+    }
   };
 
   const handleOpenCorrection = (rec: any) => {
@@ -363,7 +372,7 @@ export default function AttendancePage() {
     setCorrectModalOpen(true);
   };
 
-  const handleSaveCorrection = (e: React.FormEvent) => {
+  const handleSaveCorrection = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedAttRecord) return;
 
@@ -375,78 +384,86 @@ export default function AttendancePage() {
       else if (isEarly) finalStatus = 'early_checkout';
     }
 
-    if (selectedAttRecord.isSynthetic) {
-      recordAttendance({
-        employeeId: selectedAttRecord.employeeId,
-        employeeName: selectedAttRecord.employeeName,
-        date: selectedAttRecord.date,
-        checkIn: newCheckIn || undefined,
-        checkOut: newCheckOut || undefined,
-        status: finalStatus,
-        lateCheckIn: isLate,
-        earlyCheckOut: isEarly,
-        manualCorrection: true,
-        correctedBy: currentUser?.name || 'Admin',
-        notes: correctionNote ? `Admin Record: ${correctionNote}` : 'Recorded manually by HR/Admin',
-      });
-
-      addLog({
-        userId: currentUser?.id || 'USR-002',
-        userName: currentUser?.name || 'Admin',
-        action: 'Record Attendance',
-        module: 'Attendance',
-        details: `Manually recorded attendance for ${selectedAttRecord.employeeName} on ${selectedAttRecord.date} as ${finalStatus.toUpperCase()}`,
-      });
-
-      toast.success(`Attendance recorded for ${selectedAttRecord.employeeName}`);
-    } else {
-      correctAttendance(
-        selectedAttRecord.id,
-        {
-          status: finalStatus,
+    try {
+      if (selectedAttRecord.isSynthetic) {
+        await recordAttendance({
+          employeeId: selectedAttRecord.employeeId,
+          employeeName: selectedAttRecord.employeeName,
+          date: selectedAttRecord.date,
           checkIn: newCheckIn || undefined,
           checkOut: newCheckOut || undefined,
+          status: finalStatus,
           lateCheckIn: isLate,
           earlyCheckOut: isEarly,
-          notes: correctionNote ? `Correction: ${correctionNote}` : 'Manually corrected by HR/Admin',
-        },
-        currentUser?.name || 'Admin'
-      );
+          manualCorrection: true,
+          correctedBy: currentUser?.name || 'Admin',
+          notes: correctionNote ? `Admin Record: ${correctionNote}` : 'Recorded manually by HR/Admin',
+        });
 
-      addLog({
-        userId: currentUser?.id || 'USR-002',
-        userName: currentUser?.name || 'Admin',
-        action: 'Correct Attendance',
-        module: 'Attendance',
-        details: `Corrected attendance for ${selectedAttRecord.employeeName} on ${selectedAttRecord.date} to ${finalStatus.toUpperCase()}`,
-      });
+        addLog({
+          userId: currentUser?.id || 'USR-002',
+          userName: currentUser?.name || 'Admin',
+          action: 'Record Attendance',
+          module: 'Attendance',
+          details: `Manually recorded attendance for ${selectedAttRecord.employeeName} on ${selectedAttRecord.date} as ${finalStatus.toUpperCase()}`,
+        });
 
-      toast.success('Attendance record updated and logged');
+        toast.success(`Attendance recorded for ${selectedAttRecord.employeeName}`);
+      } else {
+        await correctAttendance(
+          selectedAttRecord.id,
+          {
+            status: finalStatus,
+            checkIn: newCheckIn || undefined,
+            checkOut: newCheckOut || undefined,
+            lateCheckIn: isLate,
+            earlyCheckOut: isEarly,
+            notes: correctionNote ? `Correction: ${correctionNote}` : 'Manually corrected by HR/Admin',
+          },
+          currentUser?.name || 'Admin'
+        );
+
+        addLog({
+          userId: currentUser?.id || 'USR-002',
+          userName: currentUser?.name || 'Admin',
+          action: 'Correct Attendance',
+          module: 'Attendance',
+          details: `Corrected attendance for ${selectedAttRecord.employeeName} on ${selectedAttRecord.date} to ${finalStatus.toUpperCase()}`,
+        });
+
+        toast.success('Attendance record updated and logged');
+      }
+
+      setCorrectModalOpen(false);
+    } catch {
+      // Error surfaced by store
     }
-
-    setCorrectModalOpen(false);
   };
 
-  const handleApproveLeave = (req: any) => {
-    approveLeave(req.id, currentUser?.name || 'HR Manager');
+  const handleApproveLeave = async (req: any) => {
+    try {
+      await approveLeave(req.id, currentUser?.name || 'HR Manager');
 
-    // Notify the employee
-    addNotification({
-      title: 'Leave Request Approved',
-      message: `Your request for ${req.daysCount} day(s) of ${req.leaveType.toUpperCase()} leave has been approved by ${currentUser?.name || 'HR Manager'}.`,
-      type: 'success',
-      link: '/attendance',
-      targetEmployeeId: req.employeeId,
-    });
+      // Notify the employee
+      addNotification({
+        title: 'Leave Request Approved',
+        message: `Your request for ${req.daysCount} day(s) of ${req.leaveType.toUpperCase()} leave has been approved by ${currentUser?.name || 'HR Manager'}.`,
+        type: 'success',
+        link: '/attendance',
+        targetEmployeeId: req.employeeId,
+      });
 
-    addLog({
-      userId: currentUser?.id || 'USR-004',
-      userName: currentUser?.name || 'HR Manager',
-      action: 'Approve Leave Request',
-      module: 'Attendance',
-      details: `Approved ${req.leaveType} leave for ${req.employeeName} (${req.daysCount} days)`,
-    });
-    toast.success(`Leave request approved for ${req.employeeName}`);
+      addLog({
+        userId: currentUser?.id || 'USR-004',
+        userName: currentUser?.name || 'HR Manager',
+        action: 'Approve Leave Request',
+        module: 'Attendance',
+        details: `Approved ${req.leaveType} leave for ${req.employeeName} (${req.daysCount} days)`,
+      });
+      toast.success(`Leave request approved for ${req.employeeName}`);
+    } catch {
+      // Error surfaced by store
+    }
   };
 
   const handleRejectLeave = (req: any) => {
@@ -455,32 +472,36 @@ export default function AttendancePage() {
     setRejectModalOpen(true);
   };
 
-  const handleConfirmRejectLeave = (e: React.FormEvent) => {
+  const handleConfirmRejectLeave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!rejectingLeaveReq) return;
 
     const reason = rejectionReasonInput.trim() || 'Operational workload constraints';
-    rejectLeave(rejectingLeaveReq.id, reason, currentUser?.name || 'HR Manager');
+    try {
+      await rejectLeave(rejectingLeaveReq.id, reason, currentUser?.name || 'HR Manager');
 
-    // Notify the employee
-    addNotification({
-      title: 'Leave Request Rejected',
-      message: `Your request for ${rejectingLeaveReq.daysCount} day(s) of ${rejectingLeaveReq.leaveType.toUpperCase()} leave was rejected: ${reason}`,
-      type: 'warning',
-      link: '/attendance',
-      targetEmployeeId: rejectingLeaveReq.employeeId,
-    });
+      // Notify the employee
+      addNotification({
+        title: 'Leave Request Rejected',
+        message: `Your request for ${rejectingLeaveReq.daysCount} day(s) of ${rejectingLeaveReq.leaveType.toUpperCase()} leave was rejected: ${reason}`,
+        type: 'warning',
+        link: '/attendance',
+        targetEmployeeId: rejectingLeaveReq.employeeId,
+      });
 
-    addLog({
-      userId: currentUser?.id || 'USR-004',
-      userName: currentUser?.name || 'HR Manager',
-      action: 'Reject Leave Request',
-      module: 'Attendance',
-      details: `Rejected leave for ${rejectingLeaveReq.employeeName}. Reason: ${reason}`,
-    });
-    toast.info(`Leave request rejected for ${rejectingLeaveReq.employeeName}`);
-    setRejectModalOpen(false);
-    setRejectingLeaveReq(null);
+      addLog({
+        userId: currentUser?.id || 'USR-004',
+        userName: currentUser?.name || 'HR Manager',
+        action: 'Reject Leave Request',
+        module: 'Attendance',
+        details: `Rejected leave for ${rejectingLeaveReq.employeeName}. Reason: ${reason}`,
+      });
+      toast.info(`Leave request rejected for ${rejectingLeaveReq.employeeName}`);
+      setRejectModalOpen(false);
+      setRejectingLeaveReq(null);
+    } catch {
+      // Error surfaced by store
+    }
   };
 
   const visibleLeaves = isEmployee

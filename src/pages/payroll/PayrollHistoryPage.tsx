@@ -24,7 +24,7 @@ import { FileText, Download, Search } from 'lucide-react';
 import { usePayrollStore } from '@/stores/payrollStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useEmployeeStore } from '@/stores/employeeStore';
-import { getMonthName, formatDate } from '@/lib/utils';
+import { getMonthName } from '@/lib/utils';
 import { useExport } from '@/hooks/useExport';
 
 export default function PayrollHistoryPage() {

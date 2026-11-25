@@ -9,7 +9,7 @@ import { CurrencyDisplay } from '@/components/shared/CurrencyDisplay';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -31,13 +31,10 @@ import {
   Plus,
   Trash2,
   ShieldCheck,
-  Calendar,
-  Briefcase,
   Smartphone,
   Building,
   CreditCard,
   Camera,
-  Upload,
   Loader2,
 } from 'lucide-react';
 import { getInitials, formatDate, getMonthName, formatCurrency } from '@/lib/utils';
@@ -93,7 +90,7 @@ export default function EmployeeProfilePage() {
     ) {
       updateEmployee(employee.id, { photo: matchingUser.avatar });
     }
-  }, [employee?.id, employee?.photo, matchingUser?.avatar, updateEmployee]);
+  }, [employee, matchingUser?.avatar, updateEmployee]);
 
   // Authorization check for employees:
   const userRole = (currentUser?.role || '').toLowerCase();
