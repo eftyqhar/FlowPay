@@ -674,17 +674,64 @@ export default function SalarySettingsPage() {
           </CardContent>
         </Card>
 
-        {/* 6. Tax, Rounding & Statutory Rules */}
+        {/* 6. Tax, Provident Fund, Rounding & Statutory Rules */}
         <Card>
           <CardHeader>
             <CardTitle className="text-base font-semibold flex items-center gap-2">
-              <Receipt className="w-4 h-4 text-blue-600" /> Tax Withholding & Salary Rounding
+              <Receipt className="w-4 h-4 text-blue-600" /> Tax, Provident Fund & Salary Rounding
             </CardTitle>
             <CardDescription>
-              Configure default tax withholding (default 0%) and currency rounding precision.
+              Configure default tax withholding, Provident Fund (PF) percentages, and currency rounding precision.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="p-4 border border-emerald-200 rounded-lg bg-emerald-50/40 space-y-3">
+              <div>
+                <Label className="text-sm font-semibold text-emerald-950">
+                  Provident Fund (PF) Contribution Rates
+                </Label>
+                <p className="text-xs text-slate-600 mt-0.5">
+                  Percentage of Basic Salary contributed monthly by eligible employees and matched by the company (e.g., 8.33% or 10%). Set to 0% to disable PF deductions.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="pfEmployeePercent" className="text-xs font-medium">
+                    Employee PF Contribution (% of Basic)
+                  </Label>
+                  <Input
+                    id="pfEmployeePercent"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="50"
+                    className="bg-white"
+                    {...form.register('pfEmployeePercent', { valueAsNumber: true })}
+                  />
+                  {form.formState.errors.pfEmployeePercent && (
+                    <p className="text-xs text-red-500">{form.formState.errors.pfEmployeePercent.message}</p>
+                  )}
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="pfEmployerPercent" className="text-xs font-medium">
+                    Employer PF Match (% of Basic)
+                  </Label>
+                  <Input
+                    id="pfEmployerPercent"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="50"
+                    className="bg-white"
+                    {...form.register('pfEmployerPercent', { valueAsNumber: true })}
+                  />
+                  {form.formState.errors.pfEmployerPercent && (
+                    <p className="text-xs text-red-500">{form.formState.errors.pfEmployerPercent.message}</p>
+                  )}
+                </div>
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
