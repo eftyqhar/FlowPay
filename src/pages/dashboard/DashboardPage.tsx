@@ -6,6 +6,8 @@ import { useDepartmentStore } from '@/stores/departmentStore';
 import { useAttendanceStore } from '@/stores/attendanceStore';
 import { useLoanStore } from '@/stores/loanStore';
 import { useAuthStore } from '@/stores/authStore';
+import { useSettingsStore } from '@/stores/settingsStore';
+import { calculateProvidentFundSummary } from '@/lib/salary';
 import {
   Select,
   SelectContent,
@@ -30,6 +32,7 @@ import {
   ArrowRight,
   FileText,
   UserCheck,
+  Landmark,
 } from 'lucide-react';
 import {
   AreaChart,
@@ -55,6 +58,7 @@ export default function DashboardPage() {
   const { attendanceRecords, leaveRequests } = useAttendanceStore();
   const { loans } = useLoanStore();
   const { currentUser } = useAuthStore();
+  const { settings } = useSettingsStore();
 
   const userRole = (currentUser?.role || '').toLowerCase();
   const isEmployee = userRole === 'employee';
@@ -185,6 +189,21 @@ export default function DashboardPage() {
     return loans.find((l) => l.employeeId === myEmployee.id && l.status === 'active');
   }, [loans, myEmployee]);
 
+  const myPfSummary = useMemo(
+    () => calculateProvidentFundSummary(myPayslips),
+    [myPayslips]
+  );
+
+  const companyPfSummary = useMemo(
+    () => calculateProvidentFundSummary(payrollRecords),
+    [payrollRecords]
+  );
+
+  const monthlyPfSummary = useMemo(
+    () => calculateProvidentFundSummary(currentMonthRecords),
+    [currentMonthRecords]
+  );
+
   const years = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 2 + i);
   const months = Array.from({ length: 12 }, (_, i) => i + 1);
 
@@ -258,6 +277,57 @@ export default function DashboardPage() {
             icon={PiggyBank}
           />
         </div>
+
+        {/* Employee Total Provident Fund Summary */}
+        <Card className="border-emerald-100 bg-gradient-to-r from-emerald-50/60 via-white to-indigo-50/40 shadow-sm">
+          <CardHeader className="pb-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div className="flex items-center gap-2.5">
+              <div className="h-9 w-9 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                <Landmark className="w-5 h-5" />
+              </div>
+              <div>
+                <CardTitle className="text-base font-semibold text-slate-900">
+                  My Total Provident Fund (PF)
+                </CardTitle>
+                <CardDescription>
+                  {(myEmployee.pfEligible ?? true)
+                    ? `Enrolled • ${myPfSummary.contributionMonths} paid contribution month(s) (Rates: ${settings?.pfEmployeePercent ?? 0}% Employee / ${settings?.pfEmployerPercent ?? 0}% Employer)`
+                    : 'Not enrolled in Provident Fund'}
+                </CardDescription>
+              </div>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => navigate('/payslips')}>
+              View Payslip Breakdown
+            </Button>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="p-3.5 rounded-lg bg-white border border-emerald-200/80 shadow-xs">
+                <p className="text-xs font-medium text-slate-500">Total PF Balance</p>
+                <p className="text-2xl font-bold text-emerald-700 tabular-nums mt-1">
+                  {formatCurrency(myPfSummary.grandTotal)}
+                </p>
+              </div>
+              <div className="p-3.5 rounded-lg bg-white border border-slate-200">
+                <p className="text-xs font-medium text-slate-500">Your Contributions</p>
+                <p className="text-xl font-bold text-slate-900 tabular-nums mt-1">
+                  {formatCurrency(myPfSummary.employeeTotal)}
+                </p>
+              </div>
+              <div className="p-3.5 rounded-lg bg-white border border-slate-200">
+                <p className="text-xs font-medium text-slate-500">Employer Match</p>
+                <p className="text-xl font-bold text-indigo-700 tabular-nums mt-1">
+                  {formatCurrency(myPfSummary.employerTotal)}
+                </p>
+              </div>
+            </div>
+            {(settings?.pfEmployeePercent ?? 0) === 0 && myPfSummary.grandTotal === 0 && (
+              <p className="text-xs text-slate-500 mt-3">
+                Note: Company Provident Fund contribution rate is currently set to 0% in Salary Rules.
+              </p>
+            )}
+          </CardContent>
+        </Card>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card>
@@ -429,6 +499,60 @@ export default function DashboardPage() {
           icon={Clock}
         />
       </div>
+
+      {/* Company-Wide Total Provident Fund Summary */}
+      <Card className="border-emerald-100 bg-gradient-to-r from-emerald-50/60 via-white to-indigo-50/40 shadow-sm">
+        <CardHeader className="pb-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <div className="flex items-center gap-2.5">
+            <div className="h-9 w-9 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center">
+              <Landmark className="w-5 h-5" />
+            </div>
+            <div>
+              <CardTitle className="text-base font-semibold text-slate-900">
+                Total Provident Fund (PF) Reserve
+              </CardTitle>
+              <CardDescription>
+                Cumulative disbursed Employee + Employer PF contributions (Active rates: {settings?.pfEmployeePercent ?? 0}% Employee / {settings?.pfEmployerPercent ?? 0}% Employer)
+              </CardDescription>
+            </div>
+          </div>
+          {(isAdminOrOwner || isFinance) && (
+            <Button variant="outline" size="sm" onClick={() => navigate('/settings/salary')}>
+              Configure PF Rules <ArrowRight className="w-3.5 h-3.5 ml-1" />
+            </Button>
+          )}
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="p-3.5 rounded-lg bg-white border border-emerald-200/80 shadow-xs">
+              <p className="text-xs font-medium text-slate-500">Total Cumulative PF</p>
+              <p className="text-2xl font-bold text-emerald-700 tabular-nums mt-1">
+                {formatCurrency(companyPfSummary.grandTotal)}
+              </p>
+            </div>
+            <div className="p-3.5 rounded-lg bg-white border border-slate-200">
+              <p className="text-xs font-medium text-slate-500">Employee Contributions</p>
+              <p className="text-xl font-bold text-slate-900 tabular-nums mt-1">
+                {formatCurrency(companyPfSummary.employeeTotal)}
+              </p>
+            </div>
+            <div className="p-3.5 rounded-lg bg-white border border-slate-200">
+              <p className="text-xs font-medium text-slate-500">Employer Contributions</p>
+              <p className="text-xl font-bold text-indigo-700 tabular-nums mt-1">
+                {formatCurrency(companyPfSummary.employerTotal)}
+              </p>
+            </div>
+            <div className="p-3.5 rounded-lg bg-white border border-slate-200">
+              <p className="text-xs font-medium text-slate-500">
+                {getMonthName(selectedMonth)} {selectedYear} PF
+              </p>
+              <p className="text-xl font-bold text-slate-900 tabular-nums mt-1">
+                {formatCurrency(monthlyPfSummary.grandTotal)}
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Operational Highlights: Attendance & Approvals */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

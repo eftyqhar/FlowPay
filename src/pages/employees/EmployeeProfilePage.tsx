@@ -38,7 +38,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { getInitials, formatDate, getMonthName, formatCurrency } from '@/lib/utils';
-import { calculateFullSalary } from '@/lib/salary';
+import { calculateFullSalary, calculateProvidentFundSummary } from '@/lib/salary';
 import { PayslipPreviewDialog } from '@/components/payslip/PayslipPreviewDialog';
 import { uploadAvatar } from '@/lib/imageUtils';
 import { toast } from 'sonner';
@@ -156,6 +156,7 @@ export default function EmployeeProfilePage() {
       )
     : [];
   const payslips = history.filter((h) => h.status === 'paid');
+  const employeePfSummary = calculateProvidentFundSummary(payslips);
 
   const isOwnProfile =
     Boolean(currentUser) &&
@@ -384,11 +385,23 @@ export default function EmployeeProfilePage() {
                     <p className="text-sm text-slate-500">Joining Date</p>
                     <p className="font-medium">{formatDate(employee.joiningDate)}</p>
                   </div>
-                  <div className="pt-2 border-t">
-                    <p className="text-sm text-slate-500">Provident Fund (PF) Status</p>
-                    <Badge variant="outline" className="mt-1 bg-emerald-50 text-emerald-700 border-emerald-200">
-                      {employee.pfEligible ?? true ? 'Eligible (Enrolled)' : 'Not Enrolled'}
-                    </Badge>
+                  <div className="pt-2 border-t space-y-2">
+                    <div>
+                      <p className="text-sm text-slate-500">Provident Fund (PF) Status</p>
+                      <Badge variant="outline" className="mt-1 bg-emerald-50 text-emerald-700 border-emerald-200">
+                        {employee.pfEligible ?? true ? 'Eligible (Enrolled)' : 'Not Enrolled'}
+                      </Badge>
+                    </div>
+                    <div className="p-2.5 rounded-md bg-emerald-50/70 border border-emerald-100">
+                      <p className="text-xs text-slate-500">Total Accumulated PF Balance</p>
+                      <p className="text-lg font-bold text-emerald-700 tabular-nums">
+                        {formatCurrency(employeePfSummary.grandTotal)}
+                      </p>
+                      <p className="text-[11px] text-slate-500">
+                        Employee: {formatCurrency(employeePfSummary.employeeTotal)} • Employer:{' '}
+                        {formatCurrency(employeePfSummary.employerTotal)}
+                      </p>
+                    </div>
                   </div>
                 </CardContent>
               </Card>

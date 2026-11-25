@@ -112,6 +112,47 @@ export function calculateProvidentFund(
   return { employeePF, employerPF };
 }
 
+export interface ProvidentFundSummary {
+  employeeTotal: number;
+  employerTotal: number;
+  grandTotal: number;
+  contributionMonths: number;
+}
+
+/**
+ * Aggregates cumulative Employee, Employer, and Total Provident Fund balances
+ * from disbursed ('paid') payroll records.
+ */
+export function calculateProvidentFundSummary(
+  records: Array<{
+    status?: string;
+    pfEmployeeDeduction?: number;
+    pfEmployerContribution?: number;
+  }>
+): ProvidentFundSummary {
+  let employeeTotal = 0;
+  let employerTotal = 0;
+  let contributionMonths = 0;
+
+  for (const r of records) {
+    if (r.status !== 'paid') continue;
+    const emp = r.pfEmployeeDeduction || 0;
+    const er = r.pfEmployerContribution || 0;
+    if (emp > 0 || er > 0) {
+      employeeTotal += emp;
+      employerTotal += er;
+      contributionMonths++;
+    }
+  }
+
+  return {
+    employeeTotal: roundCurrency(employeeTotal),
+    employerTotal: roundCurrency(employerTotal),
+    grandTotal: roundCurrency(employeeTotal + employerTotal),
+    contributionMonths,
+  };
+}
+
 export interface FullSalaryCalculationInput {
   basicSalary: number;
   allowances: number;

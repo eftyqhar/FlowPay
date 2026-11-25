@@ -220,6 +220,17 @@ export function PayslipTemplate({ payrollRecord, idSuffix = '' }: PayslipTemplat
         </div>
       </div>
 
+      {payrollRecord.pfEmployerContribution && payrollRecord.pfEmployerContribution > 0 ? (
+        <div className="bg-emerald-50/70 border border-emerald-200 rounded-md px-4 py-2.5 mb-6 flex justify-between items-center text-xs text-emerald-900">
+          <span>
+            <strong>Employer Provident Fund Contribution</strong> (Credited to your PF account, not deducted from pay)
+          </span>
+          <span className="font-bold tabular-nums text-emerald-700">
+            +<CurrencyDisplay amount={payrollRecord.pfEmployerContribution} />
+          </span>
+        </div>
+      ) : null}
+
       {/* Payment Voucher & Audit Info */}
       <div className="grid grid-cols-2 gap-4 text-xs text-slate-600 bg-slate-50 p-3 rounded-md border mb-8">
         <div>

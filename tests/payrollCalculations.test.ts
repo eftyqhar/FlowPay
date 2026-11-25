@@ -7,6 +7,7 @@ import {
   calculateOvertimePay,
   calculateUnpaidLeaveDeduction,
   calculateProvidentFund,
+  calculateProvidentFundSummary,
   calculateFullSalary,
 } from '../src/lib/salary';
 
@@ -221,6 +222,29 @@ describe('FlowPay Payroll Calculation Test Suite', () => {
 
     it('Full net salary paid when absent day deduction is disabled (60000)', () => {
       expect(disabledResult.netSalary).toBe(60000);
+    });
+  });
+
+  describe('Test 11: Cumulative Provident Fund Summary Aggregation', () => {
+    const summary = calculateProvidentFundSummary([
+      { status: 'paid', pfEmployeeDeduction: 4000, pfEmployerContribution: 4000 },
+      { status: 'paid', pfEmployeeDeduction: 4165.5, pfEmployerContribution: 4165.5 },
+      { status: 'approved', pfEmployeeDeduction: 5000, pfEmployerContribution: 5000 },
+      { status: 'draft', pfEmployeeDeduction: 5000, pfEmployerContribution: 5000 },
+      { status: 'paid', pfEmployeeDeduction: 0, pfEmployerContribution: 0 },
+    ]);
+
+    it('Sums only paid employee PF contributions', () => {
+      expect(summary.employeeTotal).toBe(8165.5);
+    });
+
+    it('Sums only paid employer PF contributions', () => {
+      expect(summary.employerTotal).toBe(8165.5);
+    });
+
+    it('Computes grand total across employee + employer PF and counts contributing months', () => {
+      expect(summary.grandTotal).toBe(16331);
+      expect(summary.contributionMonths).toBe(2);
     });
   });
 });

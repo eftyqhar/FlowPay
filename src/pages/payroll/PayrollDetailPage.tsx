@@ -38,6 +38,7 @@ import { usePayrollStore } from '@/stores/payrollStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useAuditStore } from '@/stores/auditStore';
 import { useEmployeeStore } from '@/stores/employeeStore';
+import { useSettingsStore } from '@/stores/settingsStore';
 import { getMonthName, formatDate, formatCurrency } from '@/lib/utils';
 import { PayslipPreviewDialog } from '@/components/payslip/PayslipPreviewDialog';
 import { PaymentMethod } from '@/lib/types';
@@ -49,6 +50,7 @@ export default function PayrollDetailPage() {
   const { payrollRecords, approvePayroll, markAsPaid, deletePayrollRecord } = usePayrollStore();
   const { currentUser } = useAuthStore();
   const { employees } = useEmployeeStore();
+  const { settings } = useSettingsStore();
   const { addLog } = useAuditStore();
 
   const [showPayslip, setShowPayslip] = useState(false);
@@ -258,7 +260,10 @@ export default function PayrollDetailPage() {
                       ) : null}
                       {record.pfEmployeeDeduction && record.pfEmployeeDeduction > 0 ? (
                         <TableRow>
-                          <TableCell>Provident Fund (Employee 8.33%)</TableCell>
+                          <TableCell>
+                            Provident Fund (Employee{' '}
+                            {settings?.pfEmployeePercent ? `${settings.pfEmployeePercent}%` : 'Rate'})
+                          </TableCell>
                           <TableCell className="text-right tabular-nums text-red-600">
                             -<CurrencyDisplay amount={record.pfEmployeeDeduction} />
                           </TableCell>
@@ -285,6 +290,15 @@ export default function PayrollDetailPage() {
                 </div>
                 <CurrencyDisplay amount={record.netSalary} className="text-2xl font-bold text-indigo-700 tabular-nums" />
               </div>
+
+              {record.pfEmployerContribution && record.pfEmployerContribution > 0 ? (
+                <div className="flex justify-between items-center p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-900">
+                  <span>Employer Provident Fund Match (Credited to Employee PF Reserve)</span>
+                  <span className="font-bold text-emerald-700 tabular-nums">
+                    +<CurrencyDisplay amount={record.pfEmployerContribution} />
+                  </span>
+                </div>
+              ) : null}
             </CardContent>
           </Card>
         </div>
