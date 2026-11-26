@@ -402,15 +402,6 @@ export default function UsersRolesPage() {
         </Dialog>
       </div>
 
-      <div className="rounded-lg border border-indigo-100 bg-indigo-50/70 p-4 flex items-start gap-3">
-        <ShieldCheck className="w-5 h-5 text-indigo-600 shrink-0 mt-0.5" />
-        <div className="text-xs text-indigo-950 leading-relaxed">
-          <p className="font-semibold text-sm text-indigo-900 mb-0.5">Role Management & Security Policy</p>
-          During self-registration, all users are automatically assigned the <strong>Employee</strong> role by default. 
-          Only the <strong>Super Admin (Owner)</strong> can modify or elevate any user's role to Admin, HR, Accountant, or Super Admin using the role selector directly in the table below.
-        </div>
-      </div>
-
       <Card>
         <CardHeader>
           <CardTitle className="text-base font-semibold">
@@ -422,89 +413,6 @@ export default function UsersRolesPage() {
         </CardHeader>
         <CardContent>
           <DataTable data={users} columns={columns} />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base font-semibold flex items-center gap-2">
-            <ShieldCheck className="w-5 h-5 text-indigo-600" /> Role & Permission Boundaries
-          </CardTitle>
-          <CardDescription>Detailed overview of module permissions enforced at route and action level</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto border rounded-md">
-            <table className="w-full text-sm text-left">
-              <thead className="bg-slate-50 text-slate-700 border-b">
-                <tr>
-                  <th className="p-3 border-r font-semibold">Module</th>
-                  <th className="p-3 border-r font-semibold">Owner</th>
-                  <th className="p-3 border-r font-semibold">Admin</th>
-                  <th className="p-3 border-r font-semibold">Accountant</th>
-                  <th className="p-3 border-r font-semibold">HR Manager</th>
-                  <th className="p-3 font-semibold">Employee</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y text-xs">
-                <tr>
-                  <td className="p-3 font-medium border-r bg-slate-50/50">Dashboard Analytics</td>
-                  <td className="p-3 border-r text-emerald-700 font-semibold">Full Executive View</td>
-                  <td className="p-3 border-r text-emerald-700 font-semibold">Full Executive View</td>
-                  <td className="p-3 border-r text-indigo-700 font-semibold">Financial & Payout KPIs</td>
-                  <td className="p-3 border-r text-purple-700 font-semibold">Headcount & Attendance</td>
-                  <td className="p-3 text-slate-500">Self-Service Summary</td>
-                </tr>
-                <tr>
-                  <td className="p-3 font-medium border-r bg-slate-50/50">Employee Directory & Profiles</td>
-                  <td className="p-3 border-r text-emerald-700 font-semibold">Full Access</td>
-                  <td className="p-3 border-r text-emerald-700 font-semibold">Full Access</td>
-                  <td className="p-3 border-r text-slate-600 font-medium">Read-Only (Bank & Salary)</td>
-                  <td className="p-3 border-r text-emerald-700 font-semibold">Hire, Edit & Docs</td>
-                  <td className="p-3 text-slate-500">Own Profile Only</td>
-                </tr>
-                <tr>
-                  <td className="p-3 font-medium border-r bg-slate-50/50">Payroll Processing & Disbursement</td>
-                  <td className="p-3 border-r text-emerald-700 font-semibold">Full Access</td>
-                  <td className="p-3 border-r text-emerald-700 font-semibold">Full Access</td>
-                  <td className="p-3 border-r text-emerald-700 font-semibold">Generate & Disburse</td>
-                  <td className="p-3 border-r text-red-500 font-semibold">Restricted (No Access)</td>
-                  <td className="p-3 text-slate-500">Own Payslips Only</td>
-                </tr>
-                <tr>
-                  <td className="p-3 font-medium border-r bg-slate-50/50">Attendance & Leave Approvals</td>
-                  <td className="p-3 border-r text-emerald-700 font-semibold">Full Access</td>
-                  <td className="p-3 border-r text-emerald-700 font-semibold">Full Access</td>
-                  <td className="p-3 border-r text-slate-600 font-medium">Read-Only Ledger</td>
-                  <td className="p-3 border-r text-emerald-700 font-semibold">Approve & Correct</td>
-                  <td className="p-3 text-slate-700">Check-in & Apply</td>
-                </tr>
-                <tr>
-                  <td className="p-3 font-medium border-r bg-slate-50/50">Loans & Advances Approval</td>
-                  <td className="p-3 border-r text-emerald-700 font-semibold">Full Access</td>
-                  <td className="p-3 border-r text-emerald-700 font-semibold">Approve & Settle</td>
-                  <td className="p-3 border-r text-emerald-700 font-semibold">Approve & Settle</td>
-                  <td className="p-3 border-r text-slate-600 font-medium">Apply for Self Only</td>
-                  <td className="p-3 text-slate-700">Apply for Advance</td>
-                </tr>
-                <tr>
-                  <td className="p-3 font-medium border-r bg-slate-50/50">Salary & Statutory Rules</td>
-                  <td className="p-3 border-r text-emerald-700 font-semibold">Full Access</td>
-                  <td className="p-3 border-r text-emerald-700 font-semibold">Full Access</td>
-                  <td className="p-3 border-r text-emerald-700 font-semibold">Configure Rates</td>
-                  <td className="p-3 border-r text-red-500 font-semibold">Restricted (No Access)</td>
-                  <td className="p-3 text-red-500 font-semibold">Restricted (No Access)</td>
-                </tr>
-                <tr>
-                  <td className="p-3 font-medium border-r bg-slate-50/50">Users, Roles & Security</td>
-                  <td className="p-3 border-r text-emerald-700 font-semibold">Full Access</td>
-                  <td className="p-3 border-r text-emerald-700 font-semibold">Full Access</td>
-                  <td className="p-3 border-r text-red-500 font-semibold">Restricted (No Access)</td>
-                  <td className="p-3 border-r text-red-500 font-semibold">Restricted (No Access)</td>
-                  <td className="p-3 text-red-500 font-semibold">Restricted (No Access)</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
         </CardContent>
       </Card>
     </div>

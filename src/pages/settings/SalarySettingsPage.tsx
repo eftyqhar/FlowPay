@@ -24,7 +24,6 @@ import { PaymentMethod } from '@/lib/types';
 import {
   Clock,
   Calendar,
-  ShieldCheck,
   Gift,
   HandCoins,
   Banknote,
@@ -244,24 +243,6 @@ export default function SalarySettingsPage() {
       />
 
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        {/* Recommended Configuration Summary Banner */}
-        <div className="rounded-xl border border-indigo-200 bg-gradient-to-r from-indigo-50/80 via-white to-purple-50/80 p-5 shadow-sm">
-          <div className="flex items-start gap-3">
-            <ShieldCheck className="w-5 h-5 text-indigo-600 mt-0.5 shrink-0" />
-            <div className="space-y-1">
-              <h3 className="text-sm font-bold text-indigo-950">
-                Recommended Policy Architecture & Overtime Detection
-              </h3>
-              <p className="text-xs text-slate-600 leading-relaxed">
-                <strong>How Overtime is Detected:</strong> The system compares daily attendance Check-in & Check-out times with your configured <strong>Daily Working Hours (default 8h)</strong>. Any work duration beyond 8 hours is automatically classified as Overtime hours. With <strong>Overtime Approval Required</strong>, overtime is verified before monthly payroll payout.
-              </p>
-              <p className="text-xs text-slate-600 leading-relaxed pt-1">
-                <strong>Net Salary Protection:</strong> Default tax withholding is set to <strong>0%</strong> (income tax is calculated per personal exemption brackets). Net salary will not be artificially reduced below Basic Salary unless unapproved absent days or active loan installments occur.
-              </p>
-            </div>
-          </div>
-        </div>
-
         {/* 1. Schedule & Working Hours */}
         <Card>
           <CardHeader>

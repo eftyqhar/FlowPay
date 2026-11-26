@@ -274,10 +274,6 @@ export function LoginPage() {
               </form>
             </TabsContent>
           </Tabs>
-
-          <p className="mt-5 text-center text-[11px] text-slate-400">
-            Powered by Supabase Cloud Database & Authentication
-          </p>
         </div>
       </div>
     </div>
